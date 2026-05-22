@@ -1,4 +1,4 @@
-name: selfaug
+name: qacd
 channels:
   - conda-forge
 dependencies:
