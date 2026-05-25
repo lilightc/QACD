@@ -153,7 +153,9 @@ def sample(
             ## cd_comments: pre-process logits from contrastive inputs
             cd_alpha = model_kwargs.get('cd_alpha')
             cd_beta = model_kwargs.get('cd_beta')
-            cd_tau = model_kwargs.get('cd_tau')
+            # cd_tau arrives as a model attribute (set before generate) rather
+            # than a generate kwarg; fall back to model_kwargs for compatibility.
+            cd_tau = model_kwargs.get('cd_tau', getattr(self, 'cd_tau', None))
 
             # version 2 set cutoff for Adaptive Plausibility Constraints
             # version 3 set cutoff for Sparsity-based Adaptive Truncation

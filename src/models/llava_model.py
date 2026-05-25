@@ -165,6 +165,7 @@ class LlavaModel(ModelWrapper):
 
         with torch.inference_mode():
             if not sas:
+                self.model.cd_tau = self.cd_tau   # read inside vcd_sample.sample
                 output_dict = self.model.generate(
                     input_ids,
                     images=images,

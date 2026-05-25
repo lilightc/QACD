@@ -52,8 +52,11 @@ class ModelWrapper:
         self.cd_param = {
             'cd_alpha': cd_config.cd_alpha,
             'cd_beta': cd_config.cd_beta,
-            'cd_tau': cd_config.cd_tau,
         }
+        # cd_tau is delivered via a model attribute (read in vcd_sample.sample),
+        # not a generate kwarg: the VCD-modified LLaVA forward doesn't declare
+        # cd_tau and transformers 4.31 rejects unknown generate kwargs.
+        self.cd_tau = cd_config.cd_tau
 
     def __getattr__(self, name):
         return getattr(self.model, name)
