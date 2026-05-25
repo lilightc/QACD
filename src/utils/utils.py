@@ -29,6 +29,8 @@ class VcdConfig:
     # QACD config (defaults keep existing call sites working)
     qacd_layer: int = 16            # mid-layer of the LLM for attention grounding
     qacd_lam: float = 1.0           # mask threshold = mean + lam * std (higher=tighter)
+    qacd_sink_norm: bool = True     # subtract query-agnostic baseline attention
+                                    # (removes sinks, isolates query-specific focus)
     qacd_smooth_sigma: float = 0.6  # Gaussian smoothing on the patch grid (0=off)
     qacd_min_region: int = 2        # drop attention blobs smaller than N cells
                                     # (keeps a varying number of regions, not 1)

@@ -331,7 +331,8 @@ class LlavaModel(ModelWrapper):
             tgt = self._qacd_target_positions(comp_ids, comp_start) or comp_positions
 
             heat = heatmap_from_attention(
-                attn, tgt, img_pos, QACD_N_IMAGE_TOKENS, QACD_GRID
+                attn, tgt, img_pos, QACD_N_IMAGE_TOKENS, QACD_GRID,
+                sink_norm=getattr(cfg, 'qacd_sink_norm', True),
             )
             mask, degenerate = mask_from_heatmap(
                 heat, image_hw, cfg.qacd_lam,

@@ -113,6 +113,31 @@ def test_mask_denoising_keeps_multiple_regions():
           '(2 clusters kept, 1-cell speck dropped)')
 
 
+def test_sink_norm_removes_baseline():
+    # one patch is a SINK (every query row attends to it) and one is the true
+    # OBJECT (only TARGET tokens attend to it). sink_norm must suppress the sink
+    # and keep the object.
+    heads, q_len = 4, 50
+    img_start, n_img = 5, 576
+    k_len = img_start + n_img + 5
+    attn = torch.zeros(heads, q_len, k_len)
+    sink = img_start + 100      # attended by ALL rows
+    obj = img_start + 300       # attended only by TARGET rows
+    target_idx = [40, 41]
+    attn[:, :, sink] = 0.5                 # universal sink
+    attn[:, target_idx, obj] = 0.8         # query-specific object
+
+    raw = heatmap_from_attention(attn, target_idx, img_start, n_img, (24, 24),
+                                 sink_norm=False).reshape(-1)
+    normed = heatmap_from_attention(attn, target_idx, img_start, n_img, (24, 24),
+                                    sink_norm=True).reshape(-1)
+    # raw: sink is strong; normed: sink suppressed, object dominates
+    assert raw[100] > 0.4, 'raw heat should see the sink'
+    assert normed[100] < 1e-4, f'sink not removed by baseline subtraction ({normed[100]})'
+    assert normed[300] > normed[100], 'object should dominate after sink removal'
+    print('PASS test_sink_norm_removes_baseline (sink suppressed, object kept)')
+
+
 def test_center_fallback():
     mask = center_region_mask((H, W), frac=0.5)
     assert mask.shape == (1, 1, H, W)
@@ -208,6 +233,7 @@ if __name__ == '__main__':
     test_intensity_monotonic()
     test_attention_pipeline()
     test_mask_denoising_keeps_multiple_regions()
+    test_sink_norm_removes_baseline()
     test_center_fallback()
     test_parse_recipe_clean()
     test_parse_recipe_aliases_and_noise()

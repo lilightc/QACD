@@ -26,8 +26,19 @@ def heatmap_from_attention(
     image_token_start: int,
     n_image_tokens: int,
     grid_hw: tuple[int, int],
+    sink_norm: bool = True,
 ) -> torch.Tensor:
     """Reduce a layer's attention to a [gh, gw] heatmap over image patches.
+
+    With `sink_norm`, subtract a query-agnostic baseline (the average attention
+    each patch receives from ALL query positions) from the TARGET-token
+    attention, keeping only the query-specific excess:
+
+        heat(patch) = relu( attn_from_TARGET(patch) - attn_from_all_rows(patch) )
+
+    This cancels attention sinks / positional bias (patches that everything
+    attends to) and isolates what the queried concept specifically looks at
+    (cf. IAVA, Li et al. 2025).
 
     Args:
         attn: attention weights for one layer, shape [heads, q_len, k_len]
@@ -36,6 +47,7 @@ def heatmap_from_attention(
         image_token_start: column index where the 576 image tokens begin.
         n_image_tokens: number of image patch tokens (e.g., 576).
         grid_hw: (gh, gw) patch grid, e.g., (24, 24).
+        sink_norm: subtract the query-agnostic baseline.
 
     Returns:
         Heatmap of shape grid_hw, non-negative, on attn's device.
@@ -44,10 +56,13 @@ def heatmap_from_attention(
         target_token_idx = torch.tensor(target_token_idx, device=attn.device)
 
     img_cols = slice(image_token_start, image_token_start + n_image_tokens)
-    # [heads, n_target, n_image]
-    sub = attn[:, target_token_idx, img_cols]
-    # average over heads and target tokens -> [n_image]
-    heat = sub.mean(dim=(0, 1)).float()
+    # target signal: average over heads and TARGET tokens -> [n_image]
+    heat = attn[:, target_token_idx, img_cols].mean(dim=(0, 1)).float()
+
+    if sink_norm:
+        # baseline: average attention each patch receives from every query row
+        baseline = attn[:, :, img_cols].mean(dim=(0, 1)).float()
+        heat = torch.clamp(heat - baseline, min=0.0)
 
     gh, gw = grid_hw
     if heat.numel() != gh * gw:

@@ -37,6 +37,7 @@ def eval_model(args):
         cd_mode=args.cd_mode,
         qacd_layer=args.qacd_layer,
         qacd_lam=args.qacd_lam,
+        qacd_sink_norm=args.qacd_sink_norm,
         qacd_smooth_sigma=args.qacd_smooth_sigma,
         qacd_min_region=args.qacd_min_region,
         qacd_dilate=args.qacd_dilate,
@@ -130,6 +131,9 @@ def get_args():
                         help='LLM layer index for attention grounding')
     parser.add_argument('--qacd-lam', type=float, default=1.0,
                         help='mask threshold = mean + lam*std (higher = tighter)')
+    parser.add_argument('--qacd-sink-norm', action=argparse.BooleanOptionalAction,
+                        default=True,
+                        help='subtract query-agnostic baseline attention (sink removal)')
     parser.add_argument('--qacd-smooth-sigma', type=float, default=0.6,
                         help='Gaussian smoothing sigma on the patch grid (0=off)')
     parser.add_argument('--qacd-min-region', type=int, default=2,
