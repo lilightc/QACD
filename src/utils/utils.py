@@ -26,6 +26,17 @@ class VcdConfig:
     mask_ratio: float
     noise_step: int
     cd_mode: str
+    # QACD config (defaults keep existing call sites working)
+    qacd_layer: int = 16            # mid-layer of the LLM for attention grounding
+    qacd_lam: float = 0.5           # mask threshold = mean + lam * std
+    qacd_region: str = 'attention'  # 'attention' | 'center' | 'full'
+    qacd_intensity: int = 0         # 0 => use the planner's chosen intensity
+    qacd_ops: tuple = ()            # () => allow all ops; else restrict the set
+    qacd_prompt: str = 'adversarial'  # 'adversarial' | 'neutral'
+    qacd_icl: bool = True           # include few-shot exemplars in the planner prompt
+    qacd_center_frac: float = 0.5   # center-fallback square size (frac of short side)
+    qacd_debug_dir: str = ''        # if set, save per-question overlays + recipes
+    demo: bool = False
 
 
 def disable_torch_init():
