@@ -39,6 +39,12 @@ output/
 checkpoints/
 wandb/
 
+# Local debug artifacts pulled from the VM (gcloud scp target)
+qacd_debug/
+
+# Course report (kept out of version control)
+CS263_Midterm_Report.pdf
+
 # Fetched by setup.sh on the VM (not version-controlled here)
 #   - VCD-modified model source packages
 #   - model checkpoints
