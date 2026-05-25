@@ -39,8 +39,9 @@ output/
 checkpoints/
 wandb/
 
-# Local debug artifacts pulled from the VM (gcloud scp target)
-qacd_debug/
+# Local debug/result dirs pulled from the VM (gcloud scp targets):
+# qacd_debug, qacd_new, qacd_tight, qacd_sink, qacd_hyst, ... (root-level only)
+/qacd_*/
 
 # Course report (kept out of version control)
 CS263_Midterm_Report.pdf
