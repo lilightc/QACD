@@ -113,6 +113,24 @@ def test_mask_denoising_keeps_multiple_regions():
           '(2 clusters kept, 1-cell speck dropped)')
 
 
+def test_otsu_coverage_scales_with_object_size():
+    # Otsu should give a SMALL region for a small object and a LARGE region for
+    # a frame-filling one (std-threshold keeps a ~fixed fraction regardless).
+    small = torch.full((24, 24), 0.1)
+    small[11:13, 11:13] = 1.0                     # tiny object (4 cells)
+    big = torch.full((24, 24), 0.1)
+    big[3:21, 3:21] = 1.0                         # frame-filling object
+
+    cov_small, _ = mask_from_heatmap(small, (H, W), thresh_mode='otsu',
+                                     smooth_sigma=0.0, min_region=1, dilate=0)
+    cov_big, _ = mask_from_heatmap(big, (H, W), thresh_mode='otsu',
+                                   smooth_sigma=0.0, min_region=1, dilate=0)
+    fs, fb = cov_small.mean().item(), cov_big.mean().item()
+    assert fb > 5 * fs, f'otsu coverage did not scale with size (small={fs:.3f} big={fb:.3f})'
+    print(f'PASS test_otsu_coverage_scales_with_object_size '
+          f'(small={fs:.1%} -> big={fb:.1%})')
+
+
 def test_sink_norm_removes_baseline():
     # one patch is a SINK (every query row attends to it) and one is the true
     # OBJECT (only TARGET tokens attend to it). sink_norm must suppress the sink
@@ -233,6 +251,7 @@ if __name__ == '__main__':
     test_intensity_monotonic()
     test_attention_pipeline()
     test_mask_denoising_keeps_multiple_regions()
+    test_otsu_coverage_scales_with_object_size()
     test_sink_norm_removes_baseline()
     test_center_fallback()
     test_parse_recipe_clean()

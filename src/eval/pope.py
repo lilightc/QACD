@@ -36,6 +36,7 @@ def eval_model(args):
         noise_step=args.noise_step,
         cd_mode=args.cd_mode,
         qacd_layer=args.qacd_layer,
+        qacd_thresh_mode=args.qacd_thresh_mode,
         qacd_lam=args.qacd_lam,
         qacd_sink_norm=args.qacd_sink_norm,
         qacd_smooth_sigma=args.qacd_smooth_sigma,
@@ -129,8 +130,11 @@ def get_args():
     # QACD configs (only used when --cd-mode qacd)
     parser.add_argument('--qacd-layer', type=int, default=16,
                         help='LLM layer index for attention grounding')
+    parser.add_argument('--qacd-thresh-mode', type=str, default='otsu',
+                        choices=['otsu', 'std'],
+                        help='otsu=adaptive (region scales w/ object size); std=mean+lam*std')
     parser.add_argument('--qacd-lam', type=float, default=1.0,
-                        help='mask threshold = mean + lam*std (higher = tighter)')
+                        help='std multiplier (only used when --qacd-thresh-mode std)')
     parser.add_argument('--qacd-sink-norm', action=argparse.BooleanOptionalAction,
                         default=True,
                         help='subtract query-agnostic baseline attention (sink removal)')

@@ -75,26 +75,30 @@ def heatmap_from_attention(
 def mask_from_heatmap(
     heatmap: torch.Tensor,
     image_hw: tuple[int, int],
-    lam: float = 0.5,
-    smooth_sigma: float = 0.8,
+    lam: float = 1.0,
+    thresh_mode: str = 'otsu',
+    smooth_sigma: float = 0.6,
     min_region: int = 2,
-    dilate: int = 1,
+    dilate: int = 0,
 ) -> tuple[torch.Tensor, bool]:
     """Threshold a patch heatmap into a clean region mask and upsample.
 
     Raw LVLM attention is noisy (scattered hot patches + attention sinks), so
     the heatmap is denoised before/after thresholding:
       1. Gaussian smoothing on the patch grid    -> merges signal, kills specks
-      2. threshold at mean + lam * std
+      2. threshold (see thresh_mode)
       3. drop connected components smaller than `min_region` cells -> removes
          scattered noise while KEEPING multiple genuine regions (counting,
          relations, multi-object / open-ended queries, not just one object)
-      4. dilate                                    -> ensure full object coverage
+      4. dilate                                    -> optional coverage expansion
 
     Args:
         heatmap: [gh, gw] non-negative attention heatmap.
         image_hw: (H, W) target image resolution.
-        lam: std multiplier for the adaptive threshold.
+        lam: std multiplier (only used when thresh_mode='std').
+        thresh_mode: 'otsu' (adaptive: region size scales with the attention
+            distribution / object extent) or 'std' (fixed mean + lam*std, which
+            keeps a roughly constant fraction regardless of object size).
         smooth_sigma: Gaussian sigma on the grid (0 disables smoothing).
         min_region: drop connected components smaller than this many grid cells
             (1 or 0 keeps everything; does NOT force a single blob).
@@ -108,7 +112,10 @@ def mask_from_heatmap(
     if smooth_sigma and smooth_sigma > 0:
         h = _gaussian_blur_grid(h, smooth_sigma)
 
-    thresh = h.mean() + lam * h.std()
+    if thresh_mode == 'otsu':
+        thresh = _otsu_threshold(h)
+    else:
+        thresh = h.mean() + lam * h.std()
     grid_mask = (h > thresh).float()
 
     degenerate = bool(grid_mask.sum() == 0)
@@ -130,6 +137,30 @@ def mask_from_heatmap(
         mode='nearest',
     )
     return mask, degenerate
+
+
+def _otsu_threshold(grid: torch.Tensor, bins: int = 64) -> torch.Tensor:
+    """Otsu's threshold: the value that best separates the heatmap into two
+    classes (attended / not) by maximizing between-class variance.
+
+    Unlike mean+lam*std (which keeps a roughly fixed fraction of patches), this
+    adapts to the distribution shape, so region size scales with object extent:
+    a frame-filling object with broadly-elevated attention yields a large
+    region, a small peaked object a small one.
+    """
+    x = grid.flatten()
+    lo, hi = x.min(), x.max()
+    if (hi - lo) <= 1e-12:
+        return lo  # flat heatmap -> everything below; caller handles degenerate
+    hist = torch.histc(x, bins=bins, min=float(lo), max=float(hi))
+    centers = lo + (torch.arange(bins, device=x.device) + 0.5) * (hi - lo) / bins
+    w = hist / hist.sum()
+    cum_w = torch.cumsum(w, 0)
+    cum_mean = torch.cumsum(w * centers, 0)
+    total_mean = cum_mean[-1]
+    denom = cum_w * (1.0 - cum_w)
+    sigma_b = (total_mean * cum_w - cum_mean) ** 2 / (denom + 1e-12)
+    return centers[int(torch.argmax(sigma_b))]
 
 
 def _gaussian_blur_grid(grid: torch.Tensor, sigma: float) -> torch.Tensor:

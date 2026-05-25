@@ -28,7 +28,8 @@ class VcdConfig:
     cd_mode: str
     # QACD config (defaults keep existing call sites working)
     qacd_layer: int = 16            # mid-layer of the LLM for attention grounding
-    qacd_lam: float = 1.0           # mask threshold = mean + lam * std (higher=tighter)
+    qacd_thresh_mode: str = 'otsu'  # 'otsu' (adaptive, scales w/ object size) | 'std'
+    qacd_lam: float = 1.0           # std multiplier (only used when thresh_mode='std')
     qacd_sink_norm: bool = True     # subtract query-agnostic baseline attention
                                     # (removes sinks, isolates query-specific focus)
     qacd_smooth_sigma: float = 0.6  # Gaussian smoothing on the patch grid (0=off)
