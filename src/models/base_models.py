@@ -32,7 +32,10 @@ class ModelWrapper:
             evolve_vcd_sampling()
         self.cd_config = cd_config
 
-        # generation config setup
+        # generation config setup. Note: cd_alpha is deliberately NOT set as a
+        # GenerationConfig field -- doing so makes generate() absorb a passed
+        # cd_alpha kwarg into the config and drop it from model_kwargs (-> None
+        # in vcd_sample). See cd params below.
         self.base_config = GenerationConfig(
             max_new_tokens=768,
             temperature=1.0,
@@ -40,7 +43,6 @@ class ModelWrapper:
             top_k=None,
             use_cache=True,
             return_dict_in_generate=True,
-            cd_alpha = cd_config.cd_alpha
         )
         self.greedy_config = GenerationConfig.from_dict(
             {
@@ -49,13 +51,14 @@ class ModelWrapper:
                 'num_beams': 1,
             }
         )
-        self.cd_param = {
-            'cd_alpha': cd_config.cd_alpha,
-            'cd_beta': cd_config.cd_beta,
-        }
-        # cd_tau is delivered via a model attribute (read in vcd_sample.sample),
-        # not a generate kwarg: the VCD-modified LLaVA forward doesn't declare
-        # cd_tau and transformers 4.31 rejects unknown generate kwargs.
+        # CD params (cd_alpha/beta/tau) are delivered to vcd_sample.sample via
+        # model attributes set before generate(), NOT as generate kwargs:
+        #   - stock VCD LLaVA forward doesn't declare cd_tau (4.31 rejects it)
+        #   - a config-resident cd_alpha gets absorbed into generation_config
+        # Routing all three the same way sidesteps both issues.
+        self.cd_param = {}
+        self.cd_alpha = cd_config.cd_alpha
+        self.cd_beta = cd_config.cd_beta
         self.cd_tau = cd_config.cd_tau
 
     def __getattr__(self, name):

@@ -151,10 +151,10 @@ def sample(
             next_token_logits_cd = outputs_cd.logits[:, -1, :]
 
             ## cd_comments: pre-process logits from contrastive inputs
-            cd_alpha = model_kwargs.get('cd_alpha')
-            cd_beta = model_kwargs.get('cd_beta')
-            # cd_tau arrives as a model attribute (set before generate) rather
-            # than a generate kwarg; fall back to model_kwargs for compatibility.
+            # CD params are delivered as model attributes (set before generate);
+            # fall back to model_kwargs for compatibility with other call paths.
+            cd_alpha = model_kwargs.get('cd_alpha', getattr(self, 'cd_alpha', None))
+            cd_beta = model_kwargs.get('cd_beta', getattr(self, 'cd_beta', None))
             cd_tau = model_kwargs.get('cd_tau', getattr(self, 'cd_tau', None))
 
             # version 2 set cutoff for Adaptive Plausibility Constraints

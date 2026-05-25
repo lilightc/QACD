@@ -165,7 +165,10 @@ class LlavaModel(ModelWrapper):
 
         with torch.inference_mode():
             if not sas:
-                self.model.cd_tau = self.cd_tau   # read inside vcd_sample.sample
+                # hand CD params to vcd_sample.sample via attributes (see base_models)
+                self.model.cd_alpha = self.cd_alpha
+                self.model.cd_beta = self.cd_beta
+                self.model.cd_tau = self.cd_tau
                 output_dict = self.model.generate(
                     input_ids,
                     images=images,
