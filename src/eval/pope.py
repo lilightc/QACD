@@ -35,15 +35,6 @@ def eval_model(args):
         mask_ratio=args.mask_ratio,
         noise_step=args.noise_step,
         cd_mode=args.cd_mode,
-        qacd_layer=args.qacd_layer,
-        qacd_lam=args.qacd_lam,
-        qacd_region=args.qacd_region,
-        qacd_intensity=args.qacd_intensity,
-        qacd_ops=tuple(o for o in args.qacd_ops.split(',') if o) if args.qacd_ops else (),
-        qacd_prompt=args.qacd_prompt,
-        qacd_icl=args.qacd_icl,
-        qacd_center_frac=args.qacd_center_frac,
-        qacd_debug_dir=args.qacd_debug_dir,
         demo=False
     )
     model = load_model(args.model_id, cd_config)
@@ -55,10 +46,6 @@ def eval_model(args):
         sas = None
 
     # Open result file and loop
-    if args.limit:
-        questions = questions[:args.limit]
-
-    n = parse_fb = region_fb = 0
     ans_file = open(answers_file, 'a')
     for i, line in enumerate(tqdm(questions, ncols=79)):
         idx = line['question_id']
@@ -69,14 +56,7 @@ def eval_model(args):
             image_path=os.path.join(args.image_folder, image_file),
             append_txt='\nAnswer the question using a single word or phrase',
             mode=sas[i]['applied_aug'] if cd_config.cd_mode == 'selfaug' else cd_config.cd_mode,
-            qid=idx,
         )
-
-        qacd_meta = outputs.get('qacd')
-        if qacd_meta is not None:
-            n += 1
-            parse_fb += int(qacd_meta.get('parse_fallback', False))
-            region_fb += int(qacd_meta.get('region_fallback', False))
 
         ans_file.write(json.dumps({'question_id': idx,
                                    'prompt': query,
@@ -84,21 +64,11 @@ def eval_model(args):
                                    'applied_aug': outputs.get('applied_aug'),
                                    'reason': outputs.get('reason'),
                                    'thresholds': outputs.get('thresholds'),
-                                   'qacd': qacd_meta,
                                    'model_id': args.model_id,
                                    'image': image_file,
                                    'metadata': {}}) + '\n')
         ans_file.flush()
     ans_file.close()
-
-    if n:
-        print('=' * 79)
-        print(f'QACD fallback summary ({n} questions)')
-        print(f'  parse fallback : {parse_fb}/{n} = {parse_fb / n:.1%}'
-              '  (planner output unparseable -> noise/intensity 2)')
-        print(f'  region fallback: {region_fb}/{n} = {region_fb / n:.1%}'
-              '  (attention grounding failed -> center region)')
-        print('=' * 79)
 
 
 def get_args():
@@ -122,26 +92,6 @@ def get_args():
     parser.add_argument('--cd-beta', type=float, default=0.1)
     parser.add_argument('--cd-tau', type=float, default=None)
     parser.add_argument('--sas-path', type=str, default=None)
-    # QACD configs (only used when --cd-mode qacd)
-    parser.add_argument('--qacd-layer', type=int, default=16,
-                        help='LLM layer index for attention grounding')
-    parser.add_argument('--qacd-lam', type=float, default=0.5,
-                        help='mask threshold = mean + lam*std of the heatmap')
-    parser.add_argument('--qacd-region', type=str, default='attention',
-                        choices=['attention', 'center', 'full'])
-    parser.add_argument('--qacd-intensity', type=int, default=0,
-                        help='0 = use planner-chosen intensity; else force 1/2/3')
-    parser.add_argument('--qacd-ops', type=str, default='',
-                        help='comma-separated op whitelist; empty = allow all')
-    parser.add_argument('--qacd-prompt', type=str, default='adversarial',
-                        choices=['adversarial', 'neutral'])
-    parser.add_argument('--qacd-icl', action=argparse.BooleanOptionalAction,
-                        default=True, help='few-shot exemplars in planner prompt')
-    parser.add_argument('--qacd-center-frac', type=float, default=0.5)
-    parser.add_argument('--qacd-debug-dir', type=str, default='',
-                        help='if set, save per-question overlays + recipes here')
-    parser.add_argument('--limit', type=int, default=0,
-                        help='process only the first N questions (0 = all)')
     # others
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--cuda', type=str, default='0')

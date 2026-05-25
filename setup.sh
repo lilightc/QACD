@@ -11,9 +11,7 @@ set -euo pipefail
 REPO_URL="https://github.com/lilightc/QACD.git"
 REPO_DIR="${HOME}/QACD"
 ENV_NAME="qacd"
-VCD_URL="https://github.com/DAMO-NLP-SG/VCD.git"
-LLAVA_PKG="${REPO_DIR}/src/models/llava"            # VCD-modified LLaVA source package
-LLAVA_DIR="${LLAVA_PKG}/llava-v1.5-7b"              # checkpoint, nested inside the package
+LLAVA_DIR="${REPO_DIR}/src/models/llava/llava-v1.5-7b"
 COCO_DIR="${REPO_DIR}/src/data/POPE/coco/images"
 
 log()  { printf '\n\033[1;34m[setup]\033[0m %s\n' "$*"; }
@@ -52,31 +50,6 @@ else
   conda env create -f "${REPO_DIR}/environment.yml"
 fi
 conda activate "${ENV_NAME}"
-
-# --- 3b. Install the VCD-modified LLaVA source package -----------------------
-# The repo imports `from models.llava.*` and vcd_sample.py calls
-# prepare_inputs_for_generation_cd, both provided by VCD's experiments/llava.
-# VCD uses internal absolute imports (`from llava.*`), so we rewrite them to
-# `from models.llava.*` to match this repo's package layout.
-if [ -f "${LLAVA_PKG}/constants.py" ]; then
-  log "LLaVA package already present at ${LLAVA_PKG}; skipping."
-else
-  log "Installing VCD-modified LLaVA package..."
-  TMP_VCD="$(mktemp -d)"
-  git clone --depth 1 "${VCD_URL}" "${TMP_VCD}"
-  mkdir -p "${LLAVA_PKG}"
-  cp -r "${TMP_VCD}/experiments/llava/." "${LLAVA_PKG}/"
-  rm -rf "${TMP_VCD}"
-  # rewrite internal absolute imports: llava.X -> models.llava.X
-  grep -rlE '(from|import) llava' --include='*.py' "${LLAVA_PKG}" | while read -r f; do
-    sed -i \
-      -e 's/from llava\./from models.llava./g' \
-      -e 's/from llava import/from models.llava import/g' \
-      -e 's/import llava\./import models.llava./g' \
-      "$f"
-  done
-  log "LLaVA package installed and import paths rewritten."
-fi
 
 # --- 4. Download LLaVA-1.5-7B checkpoint -------------------------------------
 if [ -f "${LLAVA_DIR}/config.json" ]; then

@@ -35,19 +35,8 @@ ENV/
 *.log
 logs/
 outputs/
-output/
 checkpoints/
 wandb/
-
-# Fetched by setup.sh on the VM (not version-controlled here)
-#   - VCD-modified model source packages
-#   - model checkpoints
-#   - benchmark images
-src/models/llava/
-src/models/lavis/
-src/models/Qwen_VL/
-src/data/POPE/coco/images
-src/data/POPE/coco/val2014/
 
 # Data (uncomment if you don't want to track large data files)
 # data/
