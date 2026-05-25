@@ -28,15 +28,15 @@ class VcdConfig:
     cd_mode: str
     # QACD config (defaults keep existing call sites working)
     qacd_layer: int = 16            # mid-layer of the LLM for attention grounding
-    qacd_thresh_mode: str = 'hysteresis'  # 'hysteresis' (grow to object extent) | 'otsu' | 'std'
-    qacd_grow_ratio: float = 0.5    # hysteresis low/high threshold ratio (lower=grows more)
-    qacd_lam: float = 1.0           # std multiplier (only used when thresh_mode='std')
-    qacd_sink_norm: bool = True     # subtract query-agnostic baseline attention
-                                    # (removes sinks, isolates query-specific focus)
-    qacd_smooth_sigma: float = 0.6  # Gaussian smoothing on the patch grid (0=off)
+    qacd_thresh_mode: str = 'std'   # 'std' (threshold+dilate) | 'hysteresis' (grow to extent)
+    qacd_grow_ratio: float = 0.5    # hysteresis low threshold = median+ratio*(high-median)
+    qacd_lam: float = 0.5           # seed/threshold = mean + lam*std (lower = broader)
+    qacd_sink_norm: bool = False    # subtract query-agnostic baseline attention
+                                    # (sharpens small objects but erases frame-filling ones)
+    qacd_smooth_sigma: float = 0.8  # Gaussian smoothing on the patch grid (0=off)
     qacd_min_region: int = 2        # drop attention blobs smaller than N cells
                                     # (keeps a varying number of regions, not 1)
-    qacd_dilate: int = 0            # dilate the mask by N grid cells (0=off)
+    qacd_dilate: int = 1            # dilate the mask by N grid cells (coverage)
     qacd_region: str = 'attention'  # 'attention' | 'center' | 'full'
     qacd_intensity: int = 0         # 0 => use the planner's chosen intensity
     qacd_ops: tuple = ()            # () => allow all ops; else restrict the set

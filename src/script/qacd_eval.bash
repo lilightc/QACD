@@ -26,13 +26,13 @@ cuda="${cuda:-0}"
 # --- QACD config (env-overridable; defaults = current best) ---
 qacd_region="${qacd_region:-attention}"            # attention | full | center
 qacd_layer="${qacd_layer:-16}"
-qacd_thresh_mode="${qacd_thresh_mode:-hysteresis}" # hysteresis | otsu | std
+qacd_thresh_mode="${qacd_thresh_mode:-std}"   # std | hysteresis
 qacd_grow_ratio="${qacd_grow_ratio:-0.5}"
-qacd_lam="${qacd_lam:-1.0}"
-qacd_sink_norm="${qacd_sink_norm:-1}"
-qacd_smooth_sigma="${qacd_smooth_sigma:-0.6}"
+qacd_lam="${qacd_lam:-0.5}"               # seed/threshold mean+lam*std (lower=broader)
+qacd_sink_norm="${qacd_sink_norm:-0}"     # 0=off (default); 1=baseline subtraction
+qacd_smooth_sigma="${qacd_smooth_sigma:-0.8}"
 qacd_min_region="${qacd_min_region:-2}"
-qacd_dilate="${qacd_dilate:-0}"
+qacd_dilate="${qacd_dilate:-1}"           # dilate N grid cells (coverage)
 qacd_prompt="${qacd_prompt:-adversarial}"
 qacd_icl="${qacd_icl:-1}"
 

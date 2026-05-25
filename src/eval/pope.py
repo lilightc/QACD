@@ -131,13 +131,13 @@ def get_args():
     # QACD configs (only used when --cd-mode qacd)
     parser.add_argument('--qacd-layer', type=int, default=16,
                         help='LLM layer index for attention grounding')
-    parser.add_argument('--qacd-thresh-mode', type=str, default='hysteresis',
-                        choices=['hysteresis', 'otsu', 'std'],
-                        help='hysteresis=grow to object extent; otsu=salient part only; std=fixed')
+    parser.add_argument('--qacd-thresh-mode', type=str, default='std',
+                        choices=['std', 'hysteresis'],
+                        help='std=threshold+dilate; hysteresis=grow to object extent')
     parser.add_argument('--qacd-grow-ratio', type=float, default=0.5,
-                        help='hysteresis low/high threshold ratio (lower = grows more)')
-    parser.add_argument('--qacd-lam', type=float, default=1.0,
-                        help='std multiplier (only used when --qacd-thresh-mode std)')
+                        help='hysteresis low threshold = median+ratio*(high-median)')
+    parser.add_argument('--qacd-lam', type=float, default=0.5,
+                        help='seed/threshold = mean + lam*std (lower = broader)')
     parser.add_argument('--qacd-sink-norm', action=argparse.BooleanOptionalAction,
                         default=True,
                         help='subtract query-agnostic baseline attention (sink removal)')

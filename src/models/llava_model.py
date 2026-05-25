@@ -336,11 +336,11 @@ class LlavaModel(ModelWrapper):
             )
             mask, degenerate = mask_from_heatmap(
                 heat, image_hw, cfg.qacd_lam,
-                thresh_mode=getattr(cfg, 'qacd_thresh_mode', 'hysteresis'),
+                thresh_mode=getattr(cfg, 'qacd_thresh_mode', 'std'),
                 grow_ratio=getattr(cfg, 'qacd_grow_ratio', 0.5),
-                smooth_sigma=getattr(cfg, 'qacd_smooth_sigma', 0.6),
+                smooth_sigma=getattr(cfg, 'qacd_smooth_sigma', 0.8),
                 min_region=getattr(cfg, 'qacd_min_region', 2),
-                dilate=getattr(cfg, 'qacd_dilate', 0),
+                dilate=getattr(cfg, 'qacd_dilate', 1),
             )
             if degenerate:
                 return None, True

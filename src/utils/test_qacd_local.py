@@ -113,24 +113,6 @@ def test_mask_denoising_keeps_multiple_regions():
           '(2 clusters kept, 1-cell speck dropped)')
 
 
-def test_otsu_coverage_scales_with_object_size():
-    # Otsu should give a SMALL region for a small object and a LARGE region for
-    # a frame-filling one (std-threshold keeps a ~fixed fraction regardless).
-    small = torch.full((24, 24), 0.1)
-    small[11:13, 11:13] = 1.0                     # tiny object (4 cells)
-    big = torch.full((24, 24), 0.1)
-    big[3:21, 3:21] = 1.0                         # frame-filling object
-
-    cov_small, _ = mask_from_heatmap(small, (H, W), thresh_mode='otsu',
-                                     smooth_sigma=0.0, min_region=1, dilate=0)
-    cov_big, _ = mask_from_heatmap(big, (H, W), thresh_mode='otsu',
-                                   smooth_sigma=0.0, min_region=1, dilate=0)
-    fs, fb = cov_small.mean().item(), cov_big.mean().item()
-    assert fb > 5 * fs, f'otsu coverage did not scale with size (small={fs:.3f} big={fb:.3f})'
-    print(f'PASS test_otsu_coverage_scales_with_object_size '
-          f'(small={fs:.1%} -> big={fb:.1%})')
-
-
 def test_hysteresis_grows_to_object_extent():
     # Object = a high-attention salient part (face, 1.0) + a connected
     # moderate-attention body (0.4), on a low background (0.05).
@@ -147,12 +129,12 @@ def test_hysteresis_grows_to_object_extent():
     assert int(grown.sum()) == 64, f'should cover the 8x8 body, got {int(grown.sum())}'
     assert grown[0, 0] == 0.0, 'hysteresis flooded the background'
 
-    # full pipeline invariant: hysteresis region >= otsu region, not flooded
+    # full pipeline: hysteresis covers >= the bare std threshold, not flooded
     hyst, _ = mask_from_heatmap(heat, (H, W), thresh_mode='hysteresis',
-                                grow_ratio=0.5, smooth_sigma=0.0, min_region=1)
-    otsu, _ = mask_from_heatmap(heat, (H, W), thresh_mode='otsu',
-                                smooth_sigma=0.0, min_region=1)
-    assert hyst.mean() >= otsu.mean(), 'hysteresis should cover at least otsu'
+                                grow_ratio=0.5, smooth_sigma=0.0, min_region=1, dilate=0)
+    std, _ = mask_from_heatmap(heat, (H, W), thresh_mode='std', lam=2.0,
+                               smooth_sigma=0.0, min_region=1, dilate=0)
+    assert hyst.mean() >= std.mean(), 'hysteresis should cover at least the seed threshold'
     assert hyst.mean() < 0.9, f'hysteresis flooded ({hyst.mean():.2f})'
     print(f'PASS test_hysteresis_grows_to_object_extent '
           f'(seeds={int(seed_only.sum())} -> grown={int(grown.sum())} cells, bg clean)')
@@ -278,7 +260,6 @@ if __name__ == '__main__':
     test_intensity_monotonic()
     test_attention_pipeline()
     test_mask_denoising_keeps_multiple_regions()
-    test_otsu_coverage_scales_with_object_size()
     test_hysteresis_grows_to_object_extent()
     test_sink_norm_removes_baseline()
     test_center_fallback()

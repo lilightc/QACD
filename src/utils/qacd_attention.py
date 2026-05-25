@@ -75,12 +75,12 @@ def heatmap_from_attention(
 def mask_from_heatmap(
     heatmap: torch.Tensor,
     image_hw: tuple[int, int],
-    lam: float = 1.0,
-    thresh_mode: str = 'hysteresis',
+    lam: float = 0.5,
+    thresh_mode: str = 'std',
     grow_ratio: float = 0.5,
-    smooth_sigma: float = 0.6,
+    smooth_sigma: float = 0.8,
     min_region: int = 2,
-    dilate: int = 0,
+    dilate: int = 1,
 ) -> tuple[torch.Tensor, bool]:
     """Threshold a patch heatmap into a clean region mask and upsample.
 
@@ -96,17 +96,16 @@ def mask_from_heatmap(
     Args:
         heatmap: [gh, gw] non-negative attention heatmap.
         image_hw: (H, W) target image resolution.
-        lam: std multiplier (only used when thresh_mode='std').
+        lam: std multiplier for the (seed) threshold = mean + lam*std.
         thresh_mode:
-            'hysteresis' - seed at the Otsu (high) threshold, then GROW through
-                connected patches above grow_ratio*high. Covers a queried
-                object's full extent (salient part -> body) while stopping at
-                the genuinely-low background. Best for object coverage.
-            'otsu' - single adaptive threshold; keeps only the high-attention
-                salient part (under-covers large objects).
-            'std' - fixed mean + lam*std; constant fraction regardless of size.
-        grow_ratio: low/high threshold ratio for hysteresis (lower = grows more,
-            toward but not to the whole image).
+            'std' - threshold at mean + lam*std (lower lam + smoothing + dilate
+                gives broad object coverage).
+            'hysteresis' - seed at mean + lam*std (high), then GROW through
+                connected patches down to a low threshold between the background
+                median and high. Covers the object's full extent (salient part
+                -> body) while stopping at the genuinely-low background.
+        grow_ratio: hysteresis low threshold = median + grow_ratio*(high-median);
+            lower => grows more (toward, but not into, the background).
         smooth_sigma: Gaussian sigma on the grid (0 disables smoothing).
         min_region: drop connected components smaller than this many grid cells
             (1 or 0 keeps everything; does NOT force a single blob).
@@ -120,19 +119,15 @@ def mask_from_heatmap(
     if smooth_sigma and smooth_sigma > 0:
         h = _gaussian_blur_grid(h, smooth_sigma)
 
+    high = h.mean() + lam * h.std()
     if thresh_mode == 'hysteresis':
-        high = _otsu_threshold(h)
-        # low threshold interpolates between the background level (median) and
-        # the Otsu high -- so it grows into the object's moderate-attention body
-        # but never dips into the background (which would flood the image).
-        # grow_ratio in [0,1]: lower => low closer to median => grows more.
+        # grow from the high seeds down to a low threshold anchored above the
+        # background median (so growth fills the object but never floods the bg).
         med = h.median()
         low = med + grow_ratio * (high - med)
         grid_mask = _hysteresis_grow(h, high, low)
-    elif thresh_mode == 'otsu':
-        grid_mask = (h > _otsu_threshold(h)).float()
-    else:
-        grid_mask = (h > h.mean() + lam * h.std()).float()
+    else:  # 'std'
+        grid_mask = (h > high).float()
 
     degenerate = bool(grid_mask.sum() == 0)
     if degenerate:
@@ -174,30 +169,6 @@ def _hysteresis_grow(
             for (i, j) in comp:
                 out[i, j] = 1.0
     return out
-
-
-def _otsu_threshold(grid: torch.Tensor, bins: int = 64) -> torch.Tensor:
-    """Otsu's threshold: the value that best separates the heatmap into two
-    classes (attended / not) by maximizing between-class variance.
-
-    Unlike mean+lam*std (which keeps a roughly fixed fraction of patches), this
-    adapts to the distribution shape, so region size scales with object extent:
-    a frame-filling object with broadly-elevated attention yields a large
-    region, a small peaked object a small one.
-    """
-    x = grid.flatten()
-    lo, hi = x.min(), x.max()
-    if (hi - lo) <= 1e-12:
-        return lo  # flat heatmap -> everything below; caller handles degenerate
-    hist = torch.histc(x, bins=bins, min=float(lo), max=float(hi))
-    centers = lo + (torch.arange(bins, device=x.device) + 0.5) * (hi - lo) / bins
-    w = hist / hist.sum()
-    cum_w = torch.cumsum(w, 0)
-    cum_mean = torch.cumsum(w * centers, 0)
-    total_mean = cum_mean[-1]
-    denom = cum_w * (1.0 - cum_w)
-    sigma_b = (total_mean * cum_w - cum_mean) ** 2 / (denom + 1e-12)
-    return centers[int(torch.argmax(sigma_b))]
 
 
 def _gaussian_blur_grid(grid: torch.Tensor, sigma: float) -> torch.Tensor:
