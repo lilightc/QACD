@@ -37,8 +37,18 @@ else
 fi
 
 # --- 3. Conda env ------------------------------------------------------------
+# Auto-discover conda: it's often installed but not on a non-login shell's PATH.
 if ! command -v conda >/dev/null; then
-  echo "conda not found. The Deep Learning VM should have it; check PATH."
+  for c in /opt/conda "${HOME}/miniconda3" "${HOME}/anaconda3"; do
+    if [ -f "${c}/etc/profile.d/conda.sh" ]; then
+      # shellcheck disable=SC1091
+      source "${c}/etc/profile.d/conda.sh"
+      break
+    fi
+  done
+fi
+if ! command -v conda >/dev/null; then
+  echo "conda not found. Install Miniconda (https://repo.anaconda.com/miniconda/) or add it to PATH."
   exit 1
 fi
 # Make `conda activate` work inside this script.

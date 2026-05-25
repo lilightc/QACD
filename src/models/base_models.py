@@ -8,7 +8,8 @@ from transformers import GenerationConfig
 
 from utils.utils import disable_torch_init
 from utils.vcd_sample import evolve_vcd_sampling
-from utils.vcd_sample2 import evolve_vcd_sampling2
+# NOTE: vcd_sample2 (Qwen3-VL) needs a newer transformers than the pinned 4.31,
+# so it is imported lazily inside ModelWrapper only when a qwen3vl model is used.
 
 
 warnings.filterwarnings('ignore')
@@ -25,6 +26,7 @@ SUPPORTED_MODELS = {
 class ModelWrapper:
     def __init__(self, cd_config, which_model):
         if 'qwen3vl' in which_model:
+            from utils.vcd_sample2 import evolve_vcd_sampling2
             evolve_vcd_sampling2()
         else:
             evolve_vcd_sampling()
