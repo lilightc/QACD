@@ -21,6 +21,17 @@ from models.llava.mm_utils import (
     KeywordsStoppingCriteria
 )
 from utils.utils import timer
+from utils.qacd_planner import build_planner_prompt, parse_recipe
+from utils.qacd_ops import apply_operation
+from utils.qacd_attention import (
+    heatmap_from_attention,
+    mask_from_heatmap,
+    center_region_mask,
+)
+
+# LLaVA-1.5 uses CLIP ViT-L/14-336 -> 24x24 = 576 image patch tokens.
+QACD_GRID = (24, 24)
+QACD_N_IMAGE_TOKENS = QACD_GRID[0] * QACD_GRID[1]
 
 
 AUG_LIST = (
@@ -69,6 +80,7 @@ class LlavaModel(ModelWrapper):
         mode: str = None,
         sas: bool = False,
         oracle: tuple = None,
+        qid=None,
     ) -> dict:
         original_query = query
         if append_txt is not None:
@@ -101,7 +113,7 @@ class LlavaModel(ModelWrapper):
             return_tensors='pt'
         ).unsqueeze(0).to('cuda')
 
-        applied_aug, reason = None, None
+        applied_aug, reason, qacd_meta = None, None, None
         if mode == 'vcd':
             image_tensor_cd, applied_aug = self.apply_augmentation(
                 aug='noise', tensor=images
@@ -138,6 +150,16 @@ class LlavaModel(ModelWrapper):
                         max_dist = l2_norm
                         image_tensor_cd = tensor_cd
                         applied_aug = selected_aug
+        elif mode == 'qacd':
+            if images is None:
+                image_tensor_cd = None
+            else:
+                image_tensor_cd, recipe, qacd_meta = self._qacd_build_cd_image(
+                    original_query, images, qid=qid
+                )
+                applied_aug = f'{recipe.op}:{recipe.intensity}'
+                reason = recipe.target if recipe.parsed_ok else \
+                    f'[fallback] target={recipe.target}'
         else:
             image_tensor_cd = None
 
@@ -167,5 +189,174 @@ class LlavaModel(ModelWrapper):
             'applied_aug': applied_aug,
             'reason': reason,
             'text': outputs.strip(),
-            'threshold': output_dict.get('threshold', None)
+            'threshold': output_dict.get('threshold', None),
+            'qacd': qacd_meta,
         }
+
+    # ------------------------------------------------------------------ QACD
+    def _build_image_prompt_ids(self, text: str) -> torch.Tensor:
+        """Build LLaVA input_ids (with the image placeholder) for `text`."""
+        if self.model.config.mm_use_im_start_end:
+            text = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + \
+                DEFAULT_IM_END_TOKEN + '\n' + text
+        else:
+            text = DEFAULT_IMAGE_TOKEN + '\n' + text
+        conv = conv_templates['llava_v1'].copy()
+        conv.append_message(conv.roles[0], text)
+        conv.append_message(conv.roles[1], None)
+        prompt = conv.get_prompt()
+        return tokenizer_image_token(
+            prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt'
+        ).unsqueeze(0).to('cuda')
+
+    @torch.inference_mode()
+    def _qacd_build_cd_image(self, query: str, images: torch.Tensor, qid=None):
+        """QACD Stages 1-3: plan a recipe, ground a region, corrupt the image.
+
+        Returns (corrupted_image_tensor, recipe, meta). `meta` records what
+        actually happened (op/intensity applied, parse + region fallbacks,
+        mask coverage) for the fallback-rate metric.
+        """
+        cfg = self.cd_config
+        h, w = images.shape[-2], images.shape[-1]
+        device = images.device
+
+        # Stage 1: image-conditioned planner -> recipe text.
+        prompt = build_planner_prompt(
+            query,
+            getattr(cfg, 'qacd_prompt', 'adversarial'),
+            icl=getattr(cfg, 'qacd_icl', True),
+        )
+        planner_ids = self._build_image_prompt_ids(prompt)
+        planner_cfg = GenerationConfig.from_dict(
+            {**self.greedy_config.to_dict(), 'max_new_tokens': 64}
+        )
+        gen = self.model.generate(
+            planner_ids, images=images, generation_config=planner_cfg
+        )
+        comp_ids = gen.sequences[0, planner_ids.shape[1]:]
+        recipe = parse_recipe(
+            self.tokenizer.decode(comp_ids, skip_special_tokens=True)
+        )
+
+        # Ablation overrides.
+        op = recipe.op
+        allowed = tuple(getattr(cfg, 'qacd_ops', ()) or ())
+        if allowed and op not in allowed:
+            op = 'noise'
+        intensity = getattr(cfg, 'qacd_intensity', 0) or recipe.intensity
+
+        # Stage 2: region mask. Track which region method actually got used and
+        # whether attention grounding fell back. A failed grounding degrades to
+        # full-image corruption (mask=None), i.e. standard VCD/SA-VCD behavior.
+        # `center` remains available only as an explicit ablation choice.
+        region = getattr(cfg, 'qacd_region', 'attention')
+        region_fallback = False
+        if region == 'full':
+            mask, used_region = None, 'full'
+        elif region == 'center':
+            mask = center_region_mask((h, w), cfg.qacd_center_frac, device)
+            used_region = 'center'
+        elif recipe.target is None:                # wanted attention, no target
+            mask = None
+            used_region, region_fallback = 'full', True
+        else:
+            mask, region_fallback = self._qacd_attention_mask(
+                planner_ids, comp_ids, images, (h, w)
+            )
+            used_region = 'full' if region_fallback else 'attention'
+
+        # Stage 3: confined pixel-space corruption.
+        image_cd = apply_operation(
+            op, intensity, images, self.image_mean, self.image_std, mask
+        )
+        recipe.op, recipe.intensity = op, intensity
+
+        coverage = float((mask[0, 0] > 0.5).float().mean()) if mask is not None else 1.0
+        meta = {
+            'op': op,
+            'intensity': intensity,
+            'target': recipe.target,
+            'parsed_ok': recipe.parsed_ok,
+            'parse_fallback': not recipe.parsed_ok,
+            'requested_region': region,
+            'used_region': used_region,
+            'region_fallback': region_fallback,
+            'mask_coverage': round(coverage, 4),
+        }
+
+        debug_dir = getattr(cfg, 'qacd_debug_dir', '') or ''
+        if debug_dir and qid is not None:
+            try:
+                from utils.qacd_debug import save_debug
+                save_debug(
+                    debug_dir, qid, query, images, image_cd, mask,
+                    self.image_mean, self.image_std, meta,
+                )
+            except Exception as e:  # noqa: BLE001 - debugging must never break a run
+                print(f'[QACD] debug save failed ({e})')
+
+        return image_cd, recipe, meta
+
+    @torch.inference_mode()
+    def _qacd_attention_mask(self, planner_ids, comp_ids, images, image_hw):
+        """Build a region mask from the planner's mid-layer cross-attention.
+
+        Returns (mask, fell_back). On a degenerate mask or any exception the
+        mask is None (full-image corruption, like VCD/SA-VCD) and fell_back is
+        True, so the pipeline always produces a usable corruption while
+        recording that grounding failed.
+        """
+        cfg = self.cd_config
+        device = images.device
+        try:
+            full = torch.cat([planner_ids[0], comp_ids]).unsqueeze(0)
+            out = self.model(
+                full, images=images, use_cache=False,
+                output_attentions=True, return_dict=True,
+            )
+            layer = max(0, min(cfg.qacd_layer, len(out.attentions) - 1))
+            attn = out.attentions[layer][0]  # [heads, q_len, k_len]
+
+            img_tok = (planner_ids[0] == IMAGE_TOKEN_INDEX).nonzero(as_tuple=True)[0]
+            img_pos = int(img_tok[0])
+            # the single image placeholder expands to QACD_N_IMAGE_TOKENS tokens,
+            # shifting every later position by (N - 1).
+            comp_start = planner_ids.shape[1] + (QACD_N_IMAGE_TOKENS - 1)
+            comp_positions = list(range(comp_start, comp_start + comp_ids.shape[0]))
+            tgt = self._qacd_target_positions(comp_ids, comp_start) or comp_positions
+
+            heat = heatmap_from_attention(
+                attn, tgt, img_pos, QACD_N_IMAGE_TOKENS, QACD_GRID
+            )
+            mask, degenerate = mask_from_heatmap(heat, image_hw, cfg.qacd_lam)
+            if degenerate:
+                return None, True
+            return mask.to(device), False
+        except Exception as e:  # noqa: BLE001 - defensive: never break decoding
+            print(f'[QACD] attention localization failed ({e}); using full image')
+            return None, True
+
+    def _qacd_target_positions(self, comp_ids, comp_start):
+        """Locate the generated TARGET-line tokens in expanded-sequence coords.
+
+        Returns None if the TARGET line can't be isolated (caller then averages
+        attention over the whole completion instead).
+        """
+        try:
+            toks = [self.tokenizer.decode([int(t)]) for t in comp_ids]
+            joined, spans = '', []
+            for s in toks:
+                spans.append((len(joined), len(joined) + len(s)))
+                joined += s
+            ti = joined.lower().find('target:')
+            if ti < 0:
+                return None
+            start = ti + len('target:')
+            nl = joined.find('\n', start)
+            nl = nl if nl >= 0 else len(joined)
+            pos = [comp_start + i for i, (a, b) in enumerate(spans)
+                   if b > start and a < nl]
+            return pos or None
+        except Exception:
+            return None
