@@ -128,15 +128,15 @@ def get_args():
     # QACD configs (only used when --cd-mode qacd)
     parser.add_argument('--qacd-layer', type=int, default=16,
                         help='LLM layer index for attention grounding')
-    parser.add_argument('--qacd-lam', type=float, default=0.5,
-                        help='mask threshold = mean + lam*std of the heatmap')
-    parser.add_argument('--qacd-smooth-sigma', type=float, default=0.8,
+    parser.add_argument('--qacd-lam', type=float, default=1.0,
+                        help='mask threshold = mean + lam*std (higher = tighter)')
+    parser.add_argument('--qacd-smooth-sigma', type=float, default=0.6,
                         help='Gaussian smoothing sigma on the patch grid (0=off)')
     parser.add_argument('--qacd-min-region', type=int, default=2,
                         help='drop attention blobs smaller than N grid cells '
                              '(keeps a varying number of regions; 1=keep all)')
-    parser.add_argument('--qacd-dilate', type=int, default=1,
-                        help='dilate the mask by N grid cells (object coverage)')
+    parser.add_argument('--qacd-dilate', type=int, default=0,
+                        help='dilate the mask by N grid cells (0=off)')
     parser.add_argument('--qacd-region', type=str, default='attention',
                         choices=['attention', 'center', 'full'])
     parser.add_argument('--qacd-intensity', type=int, default=0,

@@ -15,7 +15,10 @@ model_id="llava15_7b"
 limit="${limit:-8}"
 qacd_region="${qacd_region:-attention}"
 qacd_layer="${qacd_layer:-16}"
-qacd_lam="${qacd_lam:-0.5}"
+qacd_lam="${qacd_lam:-1.0}"               # threshold mean+lam*std (higher=tighter)
+qacd_smooth_sigma="${qacd_smooth_sigma:-0.6}"
+qacd_min_region="${qacd_min_region:-2}"
+qacd_dilate="${qacd_dilate:-0}"           # 0=off (dilation over-inflates the mask)
 qacd_prompt="${qacd_prompt:-adversarial}"
 
 dataset_name="coco"
@@ -38,6 +41,9 @@ python eval/pope.py \
   --qacd-region ${qacd_region} \
   --qacd-layer ${qacd_layer} \
   --qacd-lam ${qacd_lam} \
+  --qacd-smooth-sigma ${qacd_smooth_sigma} \
+  --qacd-min-region ${qacd_min_region} \
+  --qacd-dilate ${qacd_dilate} \
   --qacd-prompt ${qacd_prompt} \
   --qacd-debug-dir ${debug_dir} \
   --limit ${limit} \
