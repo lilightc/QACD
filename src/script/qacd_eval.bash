@@ -26,7 +26,8 @@ cuda="${cuda:-0}"
 # --- QACD config (env-overridable; defaults = current best) ---
 qacd_region="${qacd_region:-attention}"            # attention | full | center
 qacd_layer="${qacd_layer:-16}"
-qacd_thresh_mode="${qacd_thresh_mode:-otsu}"       # otsu | std
+qacd_thresh_mode="${qacd_thresh_mode:-hysteresis}" # hysteresis | otsu | std
+qacd_grow_ratio="${qacd_grow_ratio:-0.5}"
 qacd_lam="${qacd_lam:-1.0}"
 qacd_sink_norm="${qacd_sink_norm:-1}"
 qacd_smooth_sigma="${qacd_smooth_sigma:-0.6}"
@@ -62,6 +63,7 @@ for type in ${types}; do
       --qacd-region ${qacd_region} \
       --qacd-layer ${qacd_layer} \
       --qacd-thresh-mode ${qacd_thresh_mode} \
+      --qacd-grow-ratio ${qacd_grow_ratio} \
       --qacd-lam ${qacd_lam} \
       ${sink_flag} \
       --qacd-smooth-sigma ${qacd_smooth_sigma} \

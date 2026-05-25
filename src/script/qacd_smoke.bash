@@ -16,7 +16,8 @@ cd_mode="${cd_mode:-qacd}"                # "qacd" | "no_vcd" (baseline) | "vcd"
 limit="${limit:-36}"                      # 36 questions = ~6 POPE images
 qacd_region="${qacd_region:-attention}"
 qacd_layer="${qacd_layer:-16}"
-qacd_thresh_mode="${qacd_thresh_mode:-otsu}"  # otsu=adaptive size | std=fixed fraction
+qacd_thresh_mode="${qacd_thresh_mode:-hysteresis}"  # hysteresis|otsu|std
+qacd_grow_ratio="${qacd_grow_ratio:-0.5}"   # hysteresis low/high ratio (lower=grows more)
 qacd_lam="${qacd_lam:-1.0}"               # std multiplier (only for thresh_mode=std)
 qacd_sink_norm="${qacd_sink_norm:-1}"     # 1=subtract baseline attention (sink removal)
 qacd_smooth_sigma="${qacd_smooth_sigma:-0.6}"
@@ -44,6 +45,7 @@ python eval/pope.py \
   --qacd-region ${qacd_region} \
   --qacd-layer ${qacd_layer} \
   --qacd-thresh-mode ${qacd_thresh_mode} \
+  --qacd-grow-ratio ${qacd_grow_ratio} \
   --qacd-lam ${qacd_lam} \
   $([ "${qacd_sink_norm}" = "1" ] && echo --qacd-sink-norm || echo --no-qacd-sink-norm) \
   --qacd-smooth-sigma ${qacd_smooth_sigma} \

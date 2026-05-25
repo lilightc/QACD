@@ -131,6 +131,33 @@ def test_otsu_coverage_scales_with_object_size():
           f'(small={fs:.1%} -> big={fb:.1%})')
 
 
+def test_hysteresis_grows_to_object_extent():
+    # Object = a high-attention salient part (face, 1.0) + a connected
+    # moderate-attention body (0.4), on a low background (0.05).
+    from utils.qacd_attention import _hysteresis_grow
+    heat = torch.full((24, 24), 0.05)
+    heat[8:16, 8:16] = 0.4                    # body (moderate, 64 cells)
+    heat[11:13, 11:13] = 1.0                  # salient part (high)
+
+    # mechanism: seed on the salient part, grow through the connected body,
+    # stop at background.
+    grown = _hysteresis_grow(heat, torch.tensor(0.6), torch.tensor(0.2))
+    seed_only = (heat > 0.6).float()
+    assert grown.sum() > seed_only.sum(), 'hysteresis did not grow beyond seeds'
+    assert int(grown.sum()) == 64, f'should cover the 8x8 body, got {int(grown.sum())}'
+    assert grown[0, 0] == 0.0, 'hysteresis flooded the background'
+
+    # full pipeline invariant: hysteresis region >= otsu region, not flooded
+    hyst, _ = mask_from_heatmap(heat, (H, W), thresh_mode='hysteresis',
+                                grow_ratio=0.5, smooth_sigma=0.0, min_region=1)
+    otsu, _ = mask_from_heatmap(heat, (H, W), thresh_mode='otsu',
+                                smooth_sigma=0.0, min_region=1)
+    assert hyst.mean() >= otsu.mean(), 'hysteresis should cover at least otsu'
+    assert hyst.mean() < 0.9, f'hysteresis flooded ({hyst.mean():.2f})'
+    print(f'PASS test_hysteresis_grows_to_object_extent '
+          f'(seeds={int(seed_only.sum())} -> grown={int(grown.sum())} cells, bg clean)')
+
+
 def test_sink_norm_removes_baseline():
     # one patch is a SINK (every query row attends to it) and one is the true
     # OBJECT (only TARGET tokens attend to it). sink_norm must suppress the sink
@@ -252,6 +279,7 @@ if __name__ == '__main__':
     test_attention_pipeline()
     test_mask_denoising_keeps_multiple_regions()
     test_otsu_coverage_scales_with_object_size()
+    test_hysteresis_grows_to_object_extent()
     test_sink_norm_removes_baseline()
     test_center_fallback()
     test_parse_recipe_clean()

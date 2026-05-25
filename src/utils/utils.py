@@ -28,7 +28,8 @@ class VcdConfig:
     cd_mode: str
     # QACD config (defaults keep existing call sites working)
     qacd_layer: int = 16            # mid-layer of the LLM for attention grounding
-    qacd_thresh_mode: str = 'otsu'  # 'otsu' (adaptive, scales w/ object size) | 'std'
+    qacd_thresh_mode: str = 'hysteresis'  # 'hysteresis' (grow to object extent) | 'otsu' | 'std'
+    qacd_grow_ratio: float = 0.5    # hysteresis low/high threshold ratio (lower=grows more)
     qacd_lam: float = 1.0           # std multiplier (only used when thresh_mode='std')
     qacd_sink_norm: bool = True     # subtract query-agnostic baseline attention
                                     # (removes sinks, isolates query-specific focus)

@@ -76,7 +76,8 @@ def mask_from_heatmap(
     heatmap: torch.Tensor,
     image_hw: tuple[int, int],
     lam: float = 1.0,
-    thresh_mode: str = 'otsu',
+    thresh_mode: str = 'hysteresis',
+    grow_ratio: float = 0.5,
     smooth_sigma: float = 0.6,
     min_region: int = 2,
     dilate: int = 0,
@@ -96,9 +97,16 @@ def mask_from_heatmap(
         heatmap: [gh, gw] non-negative attention heatmap.
         image_hw: (H, W) target image resolution.
         lam: std multiplier (only used when thresh_mode='std').
-        thresh_mode: 'otsu' (adaptive: region size scales with the attention
-            distribution / object extent) or 'std' (fixed mean + lam*std, which
-            keeps a roughly constant fraction regardless of object size).
+        thresh_mode:
+            'hysteresis' - seed at the Otsu (high) threshold, then GROW through
+                connected patches above grow_ratio*high. Covers a queried
+                object's full extent (salient part -> body) while stopping at
+                the genuinely-low background. Best for object coverage.
+            'otsu' - single adaptive threshold; keeps only the high-attention
+                salient part (under-covers large objects).
+            'std' - fixed mean + lam*std; constant fraction regardless of size.
+        grow_ratio: low/high threshold ratio for hysteresis (lower = grows more,
+            toward but not to the whole image).
         smooth_sigma: Gaussian sigma on the grid (0 disables smoothing).
         min_region: drop connected components smaller than this many grid cells
             (1 or 0 keeps everything; does NOT force a single blob).
@@ -112,11 +120,19 @@ def mask_from_heatmap(
     if smooth_sigma and smooth_sigma > 0:
         h = _gaussian_blur_grid(h, smooth_sigma)
 
-    if thresh_mode == 'otsu':
-        thresh = _otsu_threshold(h)
+    if thresh_mode == 'hysteresis':
+        high = _otsu_threshold(h)
+        # low threshold interpolates between the background level (median) and
+        # the Otsu high -- so it grows into the object's moderate-attention body
+        # but never dips into the background (which would flood the image).
+        # grow_ratio in [0,1]: lower => low closer to median => grows more.
+        med = h.median()
+        low = med + grow_ratio * (high - med)
+        grid_mask = _hysteresis_grow(h, high, low)
+    elif thresh_mode == 'otsu':
+        grid_mask = (h > _otsu_threshold(h)).float()
     else:
-        thresh = h.mean() + lam * h.std()
-    grid_mask = (h > thresh).float()
+        grid_mask = (h > h.mean() + lam * h.std()).float()
 
     degenerate = bool(grid_mask.sum() == 0)
     if degenerate:
@@ -137,6 +153,27 @@ def mask_from_heatmap(
         mode='nearest',
     )
     return mask, degenerate
+
+
+def _hysteresis_grow(
+    heat: torch.Tensor, high_t: torch.Tensor, low_t: torch.Tensor
+) -> torch.Tensor:
+    """Hysteresis thresholding: keep connected regions above `low_t` that
+    contain at least one seed above `high_t`.
+
+    Grows from strong-attention seeds through connected moderate attention to
+    the object's full extent, stopping where attention drops below `low_t`
+    (the genuine background) -- so it covers the object without flooding the
+    whole image.
+    """
+    high = heat > high_t
+    low_mask = (heat > low_t).float()
+    out = torch.zeros_like(heat)
+    for comp in _connected_components(low_mask):
+        if any(bool(high[i, j]) for (i, j) in comp):
+            for (i, j) in comp:
+                out[i, j] = 1.0
+    return out
 
 
 def _otsu_threshold(grid: torch.Tensor, bins: int = 64) -> torch.Tensor:
