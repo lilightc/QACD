@@ -23,6 +23,10 @@ qacd_sink_norm="${qacd_sink_norm:-0}"     # 0=off (default); 1=baseline subtract
 qacd_smooth_sigma="${qacd_smooth_sigma:-0.8}"
 qacd_min_region="${qacd_min_region:-2}"
 qacd_dilate="${qacd_dilate:-1}"           # dilate N grid cells (coverage)
+# POPE asks existence ("Is there an X?"), so restrict to hide-the-object
+# degraders; desat/invert only defeat COLOR questions and are no-ops here.
+# Ablate by `qacd_ops="" ...` (allow all ops).
+qacd_ops="${qacd_ops:-blur,downsample,noise,obscure,r-noise}"
 qacd_prompt="${qacd_prompt:-adversarial}"
 
 dataset_name="coco"
@@ -51,6 +55,7 @@ python eval/pope.py \
   --qacd-smooth-sigma ${qacd_smooth_sigma} \
   --qacd-min-region ${qacd_min_region} \
   --qacd-dilate ${qacd_dilate} \
+  --qacd-ops "${qacd_ops}" \
   --qacd-prompt ${qacd_prompt} \
   --qacd-debug-dir ${debug_dir} \
   --limit ${limit} \

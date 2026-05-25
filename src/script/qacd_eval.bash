@@ -33,14 +33,20 @@ qacd_sink_norm="${qacd_sink_norm:-0}"     # 0=off (default); 1=baseline subtract
 qacd_smooth_sigma="${qacd_smooth_sigma:-0.8}"
 qacd_min_region="${qacd_min_region:-2}"
 qacd_dilate="${qacd_dilate:-1}"           # dilate N grid cells (coverage)
+# POPE = existence questions, so restrict to hide-the-object degraders by
+# default; desat/invert only defeat COLOR questions (no-ops here). The free
+# all-ops set is a later ablation: run with `qacd_ops="" ...`.
+qacd_ops="${qacd_ops:-blur,downsample,noise,obscure,r-noise}"
 qacd_prompt="${qacd_prompt:-adversarial}"
 qacd_icl="${qacd_icl:-1}"
 
 [ "${qacd_sink_norm}" = "1" ] && sink_flag="--qacd-sink-norm" || sink_flag="--no-qacd-sink-norm"
 [ "${qacd_icl}" = "1" ] && icl_flag="--qacd-icl" || icl_flag="--no-qacd-icl"
+# dir-safe ops marker for the tag ('all' when unconstrained)
+ops_tag=$(echo "${qacd_ops:-all}" | tr ',' '-' | cut -c1-16)
 
 # tag output by config so ablation runs never clobber each other
-tag="${qacd_region}_${qacd_thresh_mode}_sink${qacd_sink_norm}_L${qacd_layer}_icl${qacd_icl}"
+tag="${qacd_region}_${qacd_thresh_mode}_sink${qacd_sink_norm}_ops-${ops_tag}_L${qacd_layer}_icl${qacd_icl}"
 out_dir="./output/eval/qacd/${tag}"
 mkdir -p "${out_dir}"
 echo "QACD eval config: ${tag}"
@@ -69,6 +75,7 @@ for type in ${types}; do
       --qacd-smooth-sigma ${qacd_smooth_sigma} \
       --qacd-min-region ${qacd_min_region} \
       --qacd-dilate ${qacd_dilate} \
+      --qacd-ops "${qacd_ops}" \
       --qacd-prompt ${qacd_prompt} \
       ${icl_flag} \
       --seed ${seed} \
