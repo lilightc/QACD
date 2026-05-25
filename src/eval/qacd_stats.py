@@ -40,8 +40,7 @@ def main():
 
     n = parse_fb = region_fb = 0
     ops, intensities = Counter(), Counter()
-    coverage_sum = 0.0
-    coverage_n = 0
+    covs = []
 
     for m in _iter_records(args.paths):
         n += 1
@@ -50,8 +49,10 @@ def main():
         ops[m.get('op')] += 1
         intensities[m.get('intensity')] += 1
         if m.get('mask_coverage') is not None:
-            coverage_sum += m['mask_coverage']
-            coverage_n += 1
+            covs.append(m['mask_coverage'])
+    covs.sort()
+    coverage_sum = sum(covs)
+    coverage_n = len(covs)
 
     if not n:
         print('No QACD records found.')
@@ -63,8 +64,11 @@ def main():
     print(f'parse fallback : {parse_fb:>6}/{n} = {parse_fb / n:6.1%}')
     print(f'region fallback: {region_fb:>6}/{n} = {region_fb / n:6.1%}')
     if coverage_n:
+        cmin, cmed, cmax = covs[0], covs[len(covs) // 2], covs[-1]
         print(f'mean coverage  : {coverage_sum / coverage_n:6.1%}'
               f'  (over {coverage_n} masked questions)')
+        print(f'coverage range : {cmin:.1%} .. median {cmed:.1%} .. {cmax:.1%}'
+              '  (wide spread = region adapts to object size)')
     print('-' * 60)
     print('operation distribution:')
     for op, c in ops.most_common():
