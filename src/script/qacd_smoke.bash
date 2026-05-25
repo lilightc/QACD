@@ -12,6 +12,7 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)
 set -e
 
 model_id="llava15_7b"
+cd_mode="${cd_mode:-qacd}"                # "qacd" | "no_vcd" (baseline) | "vcd"
 limit="${limit:-36}"                      # 36 questions = ~6 POPE images
 qacd_region="${qacd_region:-attention}"
 qacd_layer="${qacd_layer:-16}"
@@ -25,8 +26,8 @@ qacd_prompt="${qacd_prompt:-adversarial}"
 dataset_name="coco"
 type="popular"
 image_folder=./data/POPE/coco/images   # symlink created by setup.sh (-> val2014)
-debug_dir=./output/qacd_debug
-answer_file=./output/qacd_debug/answers.jsonl
+debug_dir=./output/smoke_${cd_mode}     # tagged by mode so runs don't clobber
+answer_file=${debug_dir}/answers.jsonl
 cuda=0
 
 # fresh debug dir each run (recipes.jsonl/answers.jsonl are append-mode)
@@ -37,7 +38,7 @@ python eval/pope.py \
   --image-folder ${image_folder} \
   --question-file ./data/POPE/${dataset_name}/${dataset_name}_pope_${type}.jsonl \
   --answers-file ${answer_file} \
-  --cd-mode qacd \
+  --cd-mode ${cd_mode} \
   --cd-alpha 1 --cd-beta 0.1 --cd-tau 0.5 \
   --qacd-region ${qacd_region} \
   --qacd-layer ${qacd_layer} \
