@@ -25,6 +25,9 @@ debug_dir=./output/qacd_debug
 answer_file=./output/qacd_debug/answers.jsonl
 cuda=0
 
+# fresh debug dir each run (recipes.jsonl/answers.jsonl are append-mode)
+rm -rf "${debug_dir}"
+
 python eval/pope.py \
   --model-id ${model_id} \
   --image-folder ${image_folder} \

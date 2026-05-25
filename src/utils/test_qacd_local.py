@@ -85,6 +85,34 @@ def test_attention_pipeline():
     print(f'PASS test_attention_pipeline (mask covers {frac:.1%} of image)')
 
 
+def test_mask_denoising_keeps_multiple_regions():
+    # Component filter logic (decoupled from smoothing): two genuine clusters
+    # + a single-cell speck. min_region=2 must drop ONLY the 1-cell speck and
+    # keep BOTH clusters (not collapse to one blob).
+    from utils.qacd_attention import _connected_components, _filter_small_components
+    gm = torch.zeros(24, 24)
+    gm[4:7, 4:7] = 1.0                # cluster A (9 cells)
+    gm[16:19, 16:19] = 1.0            # cluster B (9 cells)
+    gm[1, 22] = 1.0                   # isolated 1-cell speck
+    assert len(_connected_components(gm)) == 3
+
+    filtered = _filter_small_components(gm, min_size=2)
+    comps = _connected_components(filtered)
+    assert len(comps) == 2, f'expected 2 regions kept, got {len(comps)}'
+    assert filtered[1, 22] == 0.0, 'single-cell speck was not dropped'
+    assert filtered[4:7, 4:7].sum() == 9 and filtered[16:19, 16:19].sum() == 9
+
+    # full path still produces a sane partial mask
+    heat = torch.zeros(24, 24)
+    heat[4:7, 4:7] = 1.0
+    heat[16:19, 16:19] = 1.0
+    mask, deg = mask_from_heatmap(heat, (H, W), lam=0.5,
+                                  smooth_sigma=0.8, min_region=2, dilate=1)
+    assert not deg and 0.0 < mask.mean().item() < 1.0
+    print('PASS test_mask_denoising_keeps_multiple_regions '
+          '(2 clusters kept, 1-cell speck dropped)')
+
+
 def test_center_fallback():
     mask = center_region_mask((H, W), frac=0.5)
     assert mask.shape == (1, 1, H, W)
@@ -179,6 +207,7 @@ if __name__ == '__main__':
     test_region_confinement()
     test_intensity_monotonic()
     test_attention_pipeline()
+    test_mask_denoising_keeps_multiple_regions()
     test_center_fallback()
     test_parse_recipe_clean()
     test_parse_recipe_aliases_and_noise()

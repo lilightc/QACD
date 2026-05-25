@@ -333,7 +333,12 @@ class LlavaModel(ModelWrapper):
             heat = heatmap_from_attention(
                 attn, tgt, img_pos, QACD_N_IMAGE_TOKENS, QACD_GRID
             )
-            mask, degenerate = mask_from_heatmap(heat, image_hw, cfg.qacd_lam)
+            mask, degenerate = mask_from_heatmap(
+                heat, image_hw, cfg.qacd_lam,
+                smooth_sigma=getattr(cfg, 'qacd_smooth_sigma', 0.8),
+                min_region=getattr(cfg, 'qacd_min_region', 2),
+                dilate=getattr(cfg, 'qacd_dilate', 1),
+            )
             if degenerate:
                 return None, True
             return mask.to(device), False

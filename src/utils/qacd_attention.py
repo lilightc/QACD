@@ -61,31 +61,53 @@ def mask_from_heatmap(
     heatmap: torch.Tensor,
     image_hw: tuple[int, int],
     lam: float = 0.5,
+    smooth_sigma: float = 0.8,
+    min_region: int = 2,
+    dilate: int = 1,
 ) -> tuple[torch.Tensor, bool]:
-    """Threshold a patch heatmap and upsample to a full-resolution mask.
+    """Threshold a patch heatmap into a clean region mask and upsample.
 
-    Threshold = mean(heatmap) + lam * std(heatmap).
+    Raw LVLM attention is noisy (scattered hot patches + attention sinks), so
+    the heatmap is denoised before/after thresholding:
+      1. Gaussian smoothing on the patch grid    -> merges signal, kills specks
+      2. threshold at mean + lam * std
+      3. drop connected components smaller than `min_region` cells -> removes
+         scattered noise while KEEPING multiple genuine regions (counting,
+         relations, multi-object / open-ended queries, not just one object)
+      4. dilate                                    -> ensure full object coverage
 
     Args:
         heatmap: [gh, gw] non-negative attention heatmap.
         image_hw: (H, W) target image resolution.
         lam: std multiplier for the adaptive threshold.
+        smooth_sigma: Gaussian sigma on the grid (0 disables smoothing).
+        min_region: drop connected components smaller than this many grid cells
+            (1 or 0 keeps everything; does NOT force a single blob).
+        dilate: grid-cell dilation iterations (0 disables).
 
     Returns:
         (mask, degenerate) where mask is [1, 1, H, W] in {0, 1} and
-        `degenerate` is True if thresholding selected no patches (caller
-        should fall back to a center region).
+        `degenerate` is True if thresholding selected no patches.
     """
-    thresh = heatmap.mean() + lam * heatmap.std()
-    grid_mask = (heatmap > thresh).float()
+    h = heatmap.float()
+    if smooth_sigma and smooth_sigma > 0:
+        h = _gaussian_blur_grid(h, smooth_sigma)
+
+    thresh = h.mean() + lam * h.std()
+    grid_mask = (h > thresh).float()
 
     degenerate = bool(grid_mask.sum() == 0)
     if degenerate:
         # keep the single most-attended patch so we never return all-zeros
-        idx = torch.argmax(heatmap)
-        grid_mask = torch.zeros_like(heatmap).reshape(-1)
+        idx = torch.argmax(h)
+        grid_mask = torch.zeros_like(h).reshape(-1)
         grid_mask[idx] = 1.0
-        grid_mask = grid_mask.reshape(heatmap.shape)
+        grid_mask = grid_mask.reshape(h.shape)
+    else:
+        if min_region and min_region > 1:
+            grid_mask = _filter_small_components(grid_mask, min_region)
+        if dilate and dilate > 0:
+            grid_mask = _dilate_grid(grid_mask, dilate)
 
     mask = F.interpolate(
         grid_mask[None, None],
@@ -93,6 +115,67 @@ def mask_from_heatmap(
         mode='nearest',
     )
     return mask, degenerate
+
+
+def _gaussian_blur_grid(grid: torch.Tensor, sigma: float) -> torch.Tensor:
+    """Separable Gaussian blur on a [gh, gw] grid (reflect padding)."""
+    radius = max(1, int(round(2 * sigma)))
+    coords = torch.arange(2 * radius + 1, dtype=torch.float32, device=grid.device) - radius
+    g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+    g = g / g.sum()
+    kernel = (g[:, None] * g[None, :])[None, None]
+    x = F.pad(grid[None, None], (radius, radius, radius, radius), mode='reflect')
+    return F.conv2d(x, kernel)[0, 0]
+
+
+def _dilate_grid(grid: torch.Tensor, iters: int) -> torch.Tensor:
+    """Binary dilation via 3x3 max-pool, `iters` times."""
+    x = grid[None, None]
+    for _ in range(iters):
+        x = F.max_pool2d(x, kernel_size=3, stride=1, padding=1)
+    return x[0, 0]
+
+
+def _connected_components(grid_mask: torch.Tensor) -> list[list[tuple[int, int]]]:
+    """All 4-connected components of a binary grid, as lists of (i, j) cells."""
+    m = grid_mask.detach().cpu().numpy() > 0.5
+    gh, gw = m.shape
+    visited = [[False] * gw for _ in range(gh)]
+    comps: list[list[tuple[int, int]]] = []
+    for i in range(gh):
+        for j in range(gw):
+            if not m[i][j] or visited[i][j]:
+                continue
+            stack, comp = [(i, j)], []
+            visited[i][j] = True
+            while stack:
+                a, b = stack.pop()
+                comp.append((a, b))
+                for da, db in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    na, nb = a + da, b + db
+                    if 0 <= na < gh and 0 <= nb < gw and m[na][nb] and not visited[na][nb]:
+                        visited[na][nb] = True
+                        stack.append((na, nb))
+            comps.append(comp)
+    return comps
+
+
+def _filter_small_components(grid_mask: torch.Tensor, min_size: int) -> torch.Tensor:
+    """Drop components smaller than `min_size` cells, keeping all others.
+
+    Keeps a varying number of regions (good for multi-object / counting /
+    relational queries). If every component is below the threshold, keep the
+    single largest so we never return an empty mask.
+    """
+    comps = _connected_components(grid_mask)
+    kept = [c for c in comps if len(c) >= min_size]
+    if not kept and comps:
+        kept = [max(comps, key=len)]
+    out = torch.zeros_like(grid_mask)
+    for comp in kept:
+        for a, b in comp:
+            out[a, b] = 1.0
+    return out
 
 
 def center_region_mask(

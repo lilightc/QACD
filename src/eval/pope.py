@@ -37,6 +37,9 @@ def eval_model(args):
         cd_mode=args.cd_mode,
         qacd_layer=args.qacd_layer,
         qacd_lam=args.qacd_lam,
+        qacd_smooth_sigma=args.qacd_smooth_sigma,
+        qacd_min_region=args.qacd_min_region,
+        qacd_dilate=args.qacd_dilate,
         qacd_region=args.qacd_region,
         qacd_intensity=args.qacd_intensity,
         qacd_ops=tuple(o for o in args.qacd_ops.split(',') if o) if args.qacd_ops else (),
@@ -127,6 +130,13 @@ def get_args():
                         help='LLM layer index for attention grounding')
     parser.add_argument('--qacd-lam', type=float, default=0.5,
                         help='mask threshold = mean + lam*std of the heatmap')
+    parser.add_argument('--qacd-smooth-sigma', type=float, default=0.8,
+                        help='Gaussian smoothing sigma on the patch grid (0=off)')
+    parser.add_argument('--qacd-min-region', type=int, default=2,
+                        help='drop attention blobs smaller than N grid cells '
+                             '(keeps a varying number of regions; 1=keep all)')
+    parser.add_argument('--qacd-dilate', type=int, default=1,
+                        help='dilate the mask by N grid cells (object coverage)')
     parser.add_argument('--qacd-region', type=str, default='attention',
                         choices=['attention', 'center', 'full'])
     parser.add_argument('--qacd-intensity', type=int, default=0,

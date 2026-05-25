@@ -29,6 +29,10 @@ class VcdConfig:
     # QACD config (defaults keep existing call sites working)
     qacd_layer: int = 16            # mid-layer of the LLM for attention grounding
     qacd_lam: float = 0.5           # mask threshold = mean + lam * std
+    qacd_smooth_sigma: float = 0.8  # Gaussian smoothing on the patch grid (0=off)
+    qacd_min_region: int = 2        # drop attention blobs smaller than N cells
+                                    # (keeps a varying number of regions, not 1)
+    qacd_dilate: int = 1            # dilate the mask by N grid cells (coverage)
     qacd_region: str = 'attention'  # 'attention' | 'center' | 'full'
     qacd_intensity: int = 0         # 0 => use the planner's chosen intensity
     qacd_ops: tuple = ()            # () => allow all ops; else restrict the set
