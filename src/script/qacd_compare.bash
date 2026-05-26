@@ -28,10 +28,10 @@ out_root="./output/compare"
 
 # cd_alpha = contrastive strength (the over-suppression lever); override via env
 cd_alpha="${cd_alpha:-1}"
-# baselines to run for reference. VCD is the key one -- QACD = VCD + query-aware
-# grounding, so QACD-vs-VCD isolates the contribution. no_vcd (greedy) is the
-# absolute floor. Override e.g. baselines="vcd" for just VCD.
-baselines="${baselines:-no_vcd vcd}"
+# Baseline = VCD: QACD = VCD + query-aware grounding, so QACD-vs-VCD isolates the
+# contribution. Greedy is omitted (VCD>greedy is established in the literature).
+# Add it back if needed via baselines="no_vcd vcd".
+baselines="${baselines:-vcd}"
 
 # shared knobs (current best); cd-mode and the threshold mode differ per config
 common=(--model-id ${model_id}
@@ -66,7 +66,7 @@ run_one "hysteresis"  qacd --qacd-thresh-mode hysteresis  --qacd-grow-ratio 0.5 
 
 echo ""
 echo "================================================================"
-echo "Done. Progression to compare:  greedy(no_vcd) -> vcd -> tight/hysteresis(qacd)"
+echo "Compare:  vcd  vs  tight/hysteresis(qacd)"
 echo "  QACD vs VCD = the contribution (targeted vs global corruption)"
 echo "  recall<<precision or yes-prop<<50%% => over-suppression; tune cd_alpha"
 echo "Answers under: ${out_root}/"
