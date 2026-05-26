@@ -26,12 +26,15 @@ cuda="${cuda:-0}"
 qfile="./data/POPE/${dataset_name}/${dataset_name}_pope_${type}.jsonl"
 out_root="./output/compare"
 
-# shared knobs (current best); only the threshold mode differs per config
+# cd_alpha = contrastive strength (the over-suppression lever); override via env
+cd_alpha="${cd_alpha:-1}"
+with_baseline="${with_baseline:-1}"   # also run a no_vcd baseline for reference
+
+# shared knobs (current best); cd-mode and the threshold mode differ per config
 common=(--model-id ${model_id}
         --image-folder ${image_folder}
         --question-file ${qfile}
-        --cd-mode qacd
-        --cd-alpha 1 --cd-beta 0.1 --cd-tau 0.5
+        --cd-alpha ${cd_alpha} --cd-beta 0.1 --cd-tau 0.5
         --qacd-region attention --qacd-layer 16
         --qacd-smooth-sigma 0.8 --qacd-min-region 2
         --no-qacd-sink-norm
@@ -40,25 +43,26 @@ common=(--model-id ${model_id}
         --seed ${seed} --cuda ${cuda})
 [ "${limit}" -gt 0 ] && common+=(--limit ${limit})
 
-run_one () {            # $1 = config name ; $2.. = config-specific flags
-  local name="$1"; shift
+run_one () {            # $1 = config name ; $2 = cd_mode ; $3.. = extra flags
+  local name="$1" mode="$2"; shift 2
   local out="${out_root}/${name}_${dataset_name}_${type}_seed${seed}.jsonl"
   mkdir -p "${out_root}"; rm -f "${out}"
   echo ""
-  echo "################  ${name}  ################"
-  python eval/pope.py "${common[@]}" "$@" --answers-file "${out}"
-  echo "----  ${name}: accuracy / precision / recall / F1  ----"
+  echo "################  ${name}  (cd_mode=${mode})  ################"
+  python eval/pope.py "${common[@]}" --cd-mode "${mode}" "$@" --answers-file "${out}"
+  echo "----  ${name}: metrics  ----"
   python eval/eval_pope.py --gt-files "${qfile}" --model-outputs "${out}"
-  echo "----  ${name}: region + op distribution  ----"
-  python eval/qacd_stats.py "${out}"
+  [ "${mode}" = "qacd" ] && { echo "----  ${name}: region + op distribution  ----"; python eval/qacd_stats.py "${out}"; }
 }
 
-echo "Comparing region configs on ${dataset_name} ${type} (limit=${limit:-full}, seed ${seed})"
-run_one "tight"       --qacd-thresh-mode std         --qacd-lam 1.0  --qacd-dilate 0
-run_one "hysteresis"  --qacd-thresh-mode hysteresis  --qacd-grow-ratio 0.5 --qacd-dilate 0
+echo "Comparing on ${dataset_name} ${type} (limit=${limit:-full}, seed ${seed}, cd_alpha=${cd_alpha})"
+[ "${with_baseline}" = "1" ] && run_one "baseline" no_vcd
+run_one "tight"       qacd --qacd-thresh-mode std         --qacd-lam 1.0  --qacd-dilate 0
+run_one "hysteresis"  qacd --qacd-thresh-mode hysteresis  --qacd-grow-ratio 0.5 --qacd-dilate 0
 
 echo ""
 echo "================================================================"
-echo "Done. Compare the F1 lines above (tight vs hysteresis)."
-echo "Answers: ${out_root}/{tight,hysteresis}_${dataset_name}_${type}_seed${seed}.jsonl"
+echo "Done. Compare the F1 / Recall / Yes-proportion lines above."
+echo "  (recall<<precision or yes-prop<<50% => over-suppression; tune cd_alpha)"
+echo "Answers: ${out_root}/{baseline,tight,hysteresis}_${dataset_name}_${type}_seed${seed}.jsonl"
 echo "For the verdict that matters, also run with:  type=adversarial bash script/qacd_compare.bash"
