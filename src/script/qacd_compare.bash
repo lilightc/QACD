@@ -28,7 +28,10 @@ out_root="./output/compare"
 
 # cd_alpha = contrastive strength (the over-suppression lever); override via env
 cd_alpha="${cd_alpha:-1}"
-with_baseline="${with_baseline:-1}"   # also run a no_vcd baseline for reference
+# baselines to run for reference. VCD is the key one -- QACD = VCD + query-aware
+# grounding, so QACD-vs-VCD isolates the contribution. no_vcd (greedy) is the
+# absolute floor. Override e.g. baselines="vcd" for just VCD.
+baselines="${baselines:-no_vcd vcd}"
 
 # shared knobs (current best); cd-mode and the threshold mode differ per config
 common=(--model-id ${model_id}
@@ -56,13 +59,15 @@ run_one () {            # $1 = config name ; $2 = cd_mode ; $3.. = extra flags
 }
 
 echo "Comparing on ${dataset_name} ${type} (limit=${limit:-full}, seed ${seed}, cd_alpha=${cd_alpha})"
-[ "${with_baseline}" = "1" ] && run_one "baseline" no_vcd
+echo "baselines: ${baselines}"
+for b in ${baselines}; do run_one "${b}" "${b}"; done       # greedy / vcd reference(s)
 run_one "tight"       qacd --qacd-thresh-mode std         --qacd-lam 1.0  --qacd-dilate 0
 run_one "hysteresis"  qacd --qacd-thresh-mode hysteresis  --qacd-grow-ratio 0.5 --qacd-dilate 0
 
 echo ""
 echo "================================================================"
-echo "Done. Compare the F1 / Recall / Yes-proportion lines above."
-echo "  (recall<<precision or yes-prop<<50% => over-suppression; tune cd_alpha)"
-echo "Answers: ${out_root}/{baseline,tight,hysteresis}_${dataset_name}_${type}_seed${seed}.jsonl"
+echo "Done. Progression to compare:  greedy(no_vcd) -> vcd -> tight/hysteresis(qacd)"
+echo "  QACD vs VCD = the contribution (targeted vs global corruption)"
+echo "  recall<<precision or yes-prop<<50%% => over-suppression; tune cd_alpha"
+echo "Answers under: ${out_root}/"
 echo "For the verdict that matters, also run with:  type=adversarial bash script/qacd_compare.bash"
