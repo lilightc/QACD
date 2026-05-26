@@ -43,8 +43,8 @@ wandb/
 # qacd_debug, qacd_new, qacd_tight, qacd_sink, qacd_hyst, ... (root-level only)
 /qacd_*/
 
-# Course report (kept out of version control)
-CS263_Midterm_Report.pdf
+# PDFs (report, reference papers like Self-Aug.pdf) — kept out of version control
+*.pdf
 
 # Fetched by setup.sh on the VM (not version-controlled here)
 #   - VCD-modified model source packages
