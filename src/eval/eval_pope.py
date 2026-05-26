@@ -38,27 +38,26 @@ gt_files = [json.loads(q) for q in open(os.path.expanduser(args.gt_files), 'r')]
 # open generated answers
 gen_files = [json.loads(q) for q in open(os.path.expanduser(args.model_outputs), 'r')]
 
-# calculate precision, recall, f1, accuracy, and the proportion of 'yes' answers
+# index generated answers by question_id -> robust to ordering AND to partial
+# runs (e.g. --limit), which positional matching could not handle.
+gen_by_id = {g['question_id']: g for g in gen_files}
+
 true_pos = 0
 true_neg = 0
 false_pos = 0
 false_neg = 0
 unknown = 0
-total_questions = len(gt_files)
 yes_answers = 0
+evaluated = 0
 
-# compare answers
-for index, line in enumerate(gt_files):
+# compare answers (only questions that were actually generated)
+for line in gt_files:
     idx = line['question_id']
-    gt_answer = line['label']
-    assert idx == gen_files[index]['question_id']
-    gen_answer = gen_files[index]['text']
-    # convert to lowercase
-    gt_answer = gt_answer.lower()
-    gen_answer = gen_answer.lower()
-    # strip
-    gt_answer = gt_answer.strip()
-    gen_answer = gen_answer.strip()
+    if idx not in gen_by_id:
+        continue  # not answered in this run (partial / limited)
+    gt_answer = line['label'].lower().strip()
+    gen_answer = gen_by_id[idx]['text'].lower().strip()
+    evaluated += 1
     # pos = 'yes', neg = 'no'
     if gt_answer == 'yes':
         if 'yes' in gen_answer:
@@ -75,13 +74,18 @@ for index, line in enumerate(gt_files):
     else:
         print(f'Warning: unknown gt_answer: {gt_answer}')
         unknown += 1
-# calculate precision, recall, f1, accuracy, and the proportion of 'yes' answers
-precision = true_pos / (true_pos + false_pos)
-recall = true_pos / (true_pos + false_neg)
-f1 = 2 * precision * recall / (precision + recall)
-accuracy = (true_pos + true_neg) / total_questions
-yes_proportion = yes_answers / total_questions
-unknown_prop = unknown / total_questions
+
+total_questions = evaluated
+# precision, recall, f1, accuracy, proportion of 'yes' answers (guard /0)
+precision = true_pos / (true_pos + false_pos) if (true_pos + false_pos) else 0.0
+recall = true_pos / (true_pos + false_neg) if (true_pos + false_neg) else 0.0
+f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+accuracy = (true_pos + true_neg) / total_questions if total_questions else 0.0
+yes_proportion = yes_answers / total_questions if total_questions else 0.0
+
 # report results
-print(f'Accuracy: {accuracy*100}')
-print(f'F1: {f1*100}\n')
+print(f'Evaluated: {evaluated} / {len(gt_files)} gt questions')
+print(f'Accuracy: {accuracy*100:.2f}')
+print(f'Precision: {precision*100:.2f}  Recall: {recall*100:.2f}')
+print(f'F1: {f1*100:.2f}')
+print(f'Yes proportion: {yes_proportion*100:.2f}\n')
