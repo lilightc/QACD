@@ -35,10 +35,12 @@ qacd_common=(--qacd-region attention --qacd-layer 16 --no-qacd-sink-norm
 run_cfg () {                # $1 method  $2 dataset  $3 split  $4 seed
   local method="$1" ds="$2" sp="$3" seed="$4"
   local qfile="./data/POPE/${ds}/${ds}_pope_${sp}.jsonl"
-  local ntotal; ntotal=$(wc -l < "${qfile}")
+  # record count via grep -c (robust to missing trailing newline; gt files lack
+  # one, so wc -l would undercount by 1 and never recognize a cell as complete).
+  local ntotal; ntotal=$(grep -c . "${qfile}")
   local ans="${out_root}/${method}_${ds}_${sp}_seed${seed}.jsonl"
 
-  if [ -f "${ans}" ] && [ "$(wc -l < "${ans}")" -eq "${ntotal}" ]; then
+  if [ -f "${ans}" ] && [ "$(grep -c . "${ans}")" -eq "${ntotal}" ]; then
     echo "[skip] ${method} ${ds} ${sp} seed${seed} (complete, ${ntotal} q)"
   else
     rm -f "${ans}"
