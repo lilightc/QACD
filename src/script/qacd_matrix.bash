@@ -62,9 +62,12 @@ run_cfg () {                # $1 method  $2 dataset  $3 split  $4 seed
 }
 
 echo "MATRIX: datasets=[${datasets}] splits=[${splits}] methods=[${methods}] seeds=[${seeds}]"
-for ds in ${datasets}; do
-  for sp in ${splits}; do
-    for s in ${seeds}; do
+# seed-MAJOR order: complete an entire seed (all datasets/splits/methods) before
+# the next seed starts -- so an interrupted/credit-limited run still yields a
+# complete single-seed table rather than a lopsided partial.
+for s in ${seeds}; do
+  for ds in ${datasets}; do
+    for sp in ${splits}; do
       for m in ${methods}; do
         run_cfg "${m}" "${ds}" "${sp}" "${s}"
       done
