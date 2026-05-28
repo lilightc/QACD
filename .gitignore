@@ -45,6 +45,8 @@ wandb/
 
 # PDFs (report, reference papers like Self-Aug.pdf) — kept out of version control
 *.pdf
+# LaTeX report sources (acl_latex.tex, report_draft.tex) — not part of the repo
+*.tex
 
 # Fetched by setup.sh on the VM (not version-controlled here)
 #   - VCD-modified model source packages
