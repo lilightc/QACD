@@ -74,7 +74,8 @@ def eval_model(args):
             query=query,
             image_path=os.path.join(args.image_folder, image_file),
             append_txt='\nAnswer the question using a single word or phrase',
-            mode=sas[i]['applied_aug'] if cd_config.cd_mode == 'selfaug' else cd_config.cd_mode,
+            mode=(sas[i]['applied_aug'] if (cd_config.cd_mode == 'selfaug' and sas is not None)
+                  else cd_config.cd_mode),  # selfaug w/o a precomputed SAS file runs inline
             qid=idx,
         )
 

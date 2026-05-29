@@ -10,6 +10,7 @@
 # Env overrides:
 #   datasets="coco aokvqa"  splits="random popular adversarial"
 #   methods="vcd tight hysteresis"  seeds="11 21 31"  cd_alpha=1
+#   extra baselines:  methods="vcd_pure savcd"   (vanilla VCD w/o SAT; SA-VCD)
 # After it finishes (or any time):  python eval/qacd_summary.py output/matrix/*.jsonl
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)
@@ -45,14 +46,17 @@ run_cfg () {                # $1 method  $2 dataset  $3 split  $4 seed
   else
     rm -f "${ans}"
     echo "[run ] ${method} ${ds} ${sp} seed${seed} ($(date +%H:%M:%S))"
+    # cd-tau (SAT) is per-method: omit it for vanilla VCD, include 0.5 elsewhere
     local args=(--model-id ${model_id} --image-folder ${image_folder}
                 --question-file "${qfile}" --answers-file "${ans}"
-                --cd-alpha ${cd_alpha} --cd-beta 0.1 --cd-tau 0.5
+                --cd-alpha ${cd_alpha} --cd-beta 0.1
                 --seed ${seed} --cuda ${cuda})
     case "${method}" in
-      vcd)        args+=(--cd-mode vcd) ;;
-      tight)      args+=(--cd-mode qacd "${qacd_common[@]}" --qacd-thresh-mode std --qacd-lam 1.0 --qacd-dilate 0) ;;
-      hysteresis) args+=(--cd-mode qacd "${qacd_common[@]}" --qacd-thresh-mode hysteresis --qacd-grow-ratio 0.5 --qacd-dilate 0) ;;
+      vcd_pure)   args+=(--cd-mode vcd) ;;                                    # vanilla VCD (no SAT)
+      vcd)        args+=(--cd-mode vcd --cd-tau 0.5) ;;                       # VCD + SAT
+      savcd)      args+=(--cd-mode selfaug --cd-tau 0.5) ;;                   # SA-VCD (SAS + SAT), inline
+      tight)      args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode std --qacd-lam 1.0 --qacd-dilate 0) ;;
+      hysteresis) args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode hysteresis --qacd-grow-ratio 0.5 --qacd-dilate 0) ;;
       *) echo "[FAIL] unknown method ${method}"; return ;;
     esac
     python eval/pope.py "${args[@]}" || { echo "[FAIL] ${ans} (see error above)"; return; }
