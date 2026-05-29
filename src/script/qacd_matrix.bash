@@ -1,16 +1,16 @@
 #!/bin/bash
 #
 # Full POPE experiment matrix for QACD on LLaVA-1.5-7B, single VM, sequential.
-#   {coco, aokvqa} x {random, popular, adversarial} x {vcd, tight, hysteresis} x seeds
+#   {coco, aokvqa} x {random, popular, adversarial} x {vcd_pure, tight, hysteresis} x seeds
 #
-# RESUMABLE: a cell whose answer file is already complete (line count == gt) is
+# RESUMABLE: a cell whose answer file is already complete (record count == gt) is
 # skipped, so a Spot preemption just resumes where it left off. Run logged:
 #   bash script/qacd_matrix.bash 2>&1 | tee ../matrix.log
 #
 # Env overrides:
 #   datasets="coco aokvqa"  splits="random popular adversarial"
-#   methods="vcd tight hysteresis"  seeds="11 21 31"  cd_alpha=1
-#   extra baselines:  methods="vcd_pure savcd"   (vanilla VCD w/o SAT; SA-VCD)
+#   methods="vcd_pure savcd tight hysteresis"  seeds="11 21 31"  cd_alpha=1
+#     vcd_pure = vanilla VCD (no SAT); savcd = SA-VCD (SAS+SAT); tight/hysteresis = QACD
 # After it finishes (or any time):  python eval/qacd_summary.py output/matrix/*.jsonl
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)
@@ -19,7 +19,7 @@ set -uo pipefail            # NOT -e: keep going if one cell errors
 model_id="llava15_7b"
 datasets="${datasets:-coco aokvqa}"
 splits="${splits:-random popular adversarial}"
-methods="${methods:-vcd tight hysteresis}"
+methods="${methods:-vcd_pure savcd tight hysteresis}"
 seeds="${seeds:-11 21 31}"
 cd_alpha="${cd_alpha:-1}"
 image_folder="${image_folder:-./data/POPE/coco/images}"   # val2014: used by BOTH datasets
@@ -53,7 +53,6 @@ run_cfg () {                # $1 method  $2 dataset  $3 split  $4 seed
                 --seed ${seed} --cuda ${cuda})
     case "${method}" in
       vcd_pure)   args+=(--cd-mode vcd) ;;                                    # vanilla VCD (no SAT)
-      vcd)        args+=(--cd-mode vcd --cd-tau 0.5) ;;                       # VCD + SAT
       savcd)      args+=(--cd-mode selfaug --cd-tau 0.5) ;;                   # SA-VCD (SAS + SAT), inline
       tight)      args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode std --qacd-lam 1.0 --qacd-dilate 0) ;;
       hysteresis) args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode hysteresis --qacd-grow-ratio 0.5 --qacd-dilate 0) ;;
