@@ -236,7 +236,7 @@ def test_planner_reasoning_variant():
     assert rh.parsed_ok and rh.op == 'blur' and rh.intensity == 2
     assert rh.target == "the cat's neck"
     print(f'PASS test_planner_reasoning_variant '
-          f'({len(targets)-1} REASON exemplars, parser hardened against prose hits)')
+          f'({len(real_targets)} REASON exemplars, parser hardened against prose hits)')
 
 
 def test_planner_fewshot_toggle():
