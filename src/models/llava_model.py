@@ -234,10 +234,12 @@ class LlavaModel(ModelWrapper):
             reasoning=reasoning,
         )
         planner_ids = self._build_image_prompt_ids(prompt)
-        # reasoning adds a one-sentence justification -> need more output tokens
+        # reasoning needs more output budget; match SA-VCD's 768-token cap so the
+        # QACD-reason vs SA-VCD comparison is apples-to-apples (same generation
+        # budget). Without reasoning, the structured 3-line recipe fits in 64.
         planner_cfg = GenerationConfig.from_dict(
             {**self.greedy_config.to_dict(),
-             'max_new_tokens': 256 if reasoning else 64}
+             'max_new_tokens': 768 if reasoning else 64}
         )
         gen = self.model.generate(
             planner_ids, images=images, generation_config=planner_cfg
