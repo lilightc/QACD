@@ -115,16 +115,18 @@ _BODY_REASON = """
 ## Available operations ##
 {menu}
 
-## Output format (exactly four lines) ##
-REASON: <one-sentence explanation of why this edit best invalidates the question>
+## Output format ##
+REASON: <brief justification: state what the question depends on, explain how your
+chosen edit invalidates that evidence, and why other operations are less suitable>
 TARGET: <one-line description of the concept or region the question depends on>
 OPERATION: <one operation name from the list above>
 INTENSITY: <1, 2, or 3, where 3 is strongest>
 
 ## Guidance ##
-Briefly justify your choice in one sentence, then output the four fields above.
-Pick the operation whose effect most directly defeats the question. Do not choose
-an edit whose result would coincidentally match a correct answer.
+First justify your choice in REASON, then output TARGET, OPERATION, and INTENSITY
+each on its own line. Pick the operation whose effect most directly defeats the
+question. Do not choose an edit whose result would coincidentally match a correct
+answer.
 {examples}
 Question: "{query}"
 """
@@ -132,43 +134,64 @@ Question: "{query}"
 _FEWSHOT_REASON = """
 ## Examples ##
 Question: "What color is the umbrella?"
-REASON: The question targets the umbrella's specific color; inverting flips it to a wrong value.
+REASON: The question depends on identifying the umbrella's specific color. Color
+inversion flips that color to a different specific value (e.g., red to cyan), so the
+model can no longer recover the original answer. Blur or grayscale would also affect
+color but less directly than a deterministic flip.
 TARGET: the umbrella
 OPERATION: invert
 INTENSITY: 2
 
 Question: "Are the flowers yellow?"
-REASON: The question depends on identifying a specific color; grayscaling removes color information.
+REASON: The question depends on whether the flowers have a particular color.
+Grayscaling removes color information entirely, so the model cannot confirm
+"yellow". Color inversion would also work but flips the color to another specific
+value; for a yes/no color-presence question, removing color is the most direct
+counter.
 TARGET: the flowers
 OPERATION: desat
 INTENSITY: 2
 
 Question: "Is there a dog in the image?"
-REASON: The question depends on seeing the dog; obscuring its region hides the evidence of existence.
+REASON: The question depends on seeing the dog. Obscure (blur + darken) hides the
+dog's region from the model while keeping the rest of the scene intact. Blur alone
+would leave a recognizable silhouette; noise might leave shape cues.
 TARGET: the dog
 OPERATION: obscure
 INTENSITY: 2
 
 Question: "How many people are in the image?"
-REASON: Counting requires distinct individuals; replacing the people region with noise makes the count impossible.
+REASON: Counting requires distinguishing individual people. Replacing the people
+region with strong noise erases their boundaries entirely, making the count
+impossible. Blur or downsample preserve enough silhouette structure for the model
+to still estimate a count.
 TARGET: the people
 OPERATION: r-noise
 INTENSITY: 3
 
 Question: "What does the sign say?"
-REASON: The question requires reading text; heavy pixelation destroys legibility.
+REASON: The question requires reading text on the sign. Heavy pixelation
+(downsample) destroys character legibility while keeping the sign itself visible.
+Blur is similar but less aggressive on small text; noise leaves enough structure
+to read short words.
 TARGET: the text on the sign
 OPERATION: downsample
 INTENSITY: 3
 
 Question: "Is the cat wearing a collar?"
-REASON: A collar is a fine detail; blurring removes the fine texture needed to identify it.
+REASON: A collar is a small, fine-grained detail around the cat's neck. Blurring
+that region removes the fine texture and contours needed to identify a collar
+without altering the rest of the cat. Downsample is similar but coarser; obscure
+would also darken unnecessarily.
 TARGET: the cat's neck
 OPERATION: blur
 INTENSITY: 2
 
 Question: "Is the table surface smooth?"
-REASON: Surface smoothness depends on fine texture; noise obscures the texture cues.
+REASON: Surface smoothness depends on fine texture cues. Adding Gaussian noise
+directly obscures those texture cues while leaving the table outline visible.
+Blur reduces texture too but produces smoother (and thus more "smooth-looking")
+artifacts, which would coincidentally match the queried property.
 TARGET: the table surface
 OPERATION: noise
 INTENSITY: 2
@@ -225,15 +248,18 @@ def parse_recipe(text: str) -> Recipe:
     target = op = None
     intensity = None
 
-    m = re.search(r'TARGET:\s*(.+)', text, re.IGNORECASE)
+    # anchor field labels to start-of-line so a multi-sentence REASON cannot
+    # accidentally produce a TARGET:/OPERATION:/INTENSITY: hit inside its prose.
+    flags = re.IGNORECASE | re.MULTILINE
+    m = re.search(r'^\s*TARGET:\s*(.+)', text, flags)
     if m:
         target = m.group(1).strip().splitlines()[0].strip() or None
 
-    m = re.search(r'OPERATION:\s*([^\n]+)', text, re.IGNORECASE)
+    m = re.search(r'^\s*OPERATION:\s*([^\n]+)', text, flags)
     if m:
         op = _canon_op(m.group(1))
 
-    m = re.search(r'INTENSITY:\s*([123])', text, re.IGNORECASE)
+    m = re.search(r'^\s*INTENSITY:\s*([123])', text, flags)
     if m:
         intensity = int(m.group(1))
 
