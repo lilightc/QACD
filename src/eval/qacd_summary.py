@@ -18,15 +18,19 @@ from collections import defaultdict
 def _metrics(gt_path, ans_path):
     gt = {json.loads(l)['question_id']: json.loads(l)['label'].lower().strip()
           for l in open(gt_path) if l.strip()}
-    tp = tn = fp = fn = yes = n = 0
-    for l in open(ans_path):
+    tp = tn = fp = fn = yes = n = bad = 0
+    for lineno, l in enumerate(open(ans_path), 1):
         if not l.strip():
             continue
-        d = json.loads(l)
-        q = d['question_id']
-        if q not in gt:
+        try:
+            d = json.loads(l)
+        except json.JSONDecodeError:
+            bad += 1                         # skip partial / corrupted lines
             continue
-        pred = d['text'].lower().strip()
+        q = d.get('question_id')
+        if q is None or q not in gt:
+            continue
+        pred = (d.get('text') or '').lower().strip()
         g = gt[q]
         n += 1
         if g == 'yes':
@@ -39,6 +43,8 @@ def _metrics(gt_path, ans_path):
                 tn += 1
             else:
                 fp += 1; yes += 1
+    if bad:
+        print(f'[warn] {bad} unparseable line(s) skipped in {ans_path}')
     prec = tp / (tp + fp) if (tp + fp) else 0.0
     rec = tp / (tp + fn) if (tp + fn) else 0.0
     f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
