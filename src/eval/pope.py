@@ -48,6 +48,7 @@ def eval_model(args):
         qacd_ops=tuple(o for o in args.qacd_ops.split(',') if o) if args.qacd_ops else (),
         qacd_prompt=args.qacd_prompt,
         qacd_icl=args.qacd_icl,
+        qacd_reason=args.qacd_reason,
         qacd_center_frac=args.qacd_center_frac,
         qacd_debug_dir=args.qacd_debug_dir,
         demo=False
@@ -159,6 +160,9 @@ def get_args():
                         choices=['adversarial', 'neutral'])
     parser.add_argument('--qacd-icl', action=argparse.BooleanOptionalAction,
                         default=True, help='few-shot exemplars in planner prompt')
+    parser.add_argument('--qacd-reason', action=argparse.BooleanOptionalAction,
+                        default=False,
+                        help='ask planner for a one-sentence Reason (slower)')
     parser.add_argument('--qacd-center-frac', type=float, default=0.5)
     parser.add_argument('--qacd-debug-dir', type=str, default='',
                         help='if set, save per-question overlays + recipes here')

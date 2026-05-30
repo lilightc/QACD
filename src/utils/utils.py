@@ -42,6 +42,8 @@ class VcdConfig:
     qacd_ops: tuple = ()            # () => allow all ops; else restrict the set
     qacd_prompt: str = 'adversarial'  # 'adversarial' | 'neutral'
     qacd_icl: bool = True           # include few-shot exemplars in the planner prompt
+    qacd_reason: bool = False       # ask the planner for a one-sentence Reason
+                                    # (more tokens; planner max_new_tokens auto-raised)
     qacd_center_frac: float = 0.5   # center-fallback square size (frac of short side)
     qacd_debug_dir: str = ''        # if set, save per-question overlays + recipes
     demo: bool = False

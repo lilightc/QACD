@@ -109,6 +109,71 @@ OPERATION: noise
 INTENSITY: 2
 """
 
+# Reasoning variant: same structure, but the planner first emits a one-sentence
+# Reason. Cost: extra tokens (raise the planner max_new_tokens accordingly).
+_BODY_REASON = """
+## Available operations ##
+{menu}
+
+## Output format (exactly four lines) ##
+REASON: <one-sentence explanation of why this edit best invalidates the question>
+TARGET: <one-line description of the concept or region the question depends on>
+OPERATION: <one operation name from the list above>
+INTENSITY: <1, 2, or 3, where 3 is strongest>
+
+## Guidance ##
+Briefly justify your choice in one sentence, then output the four fields above.
+Pick the operation whose effect most directly defeats the question. Do not choose
+an edit whose result would coincidentally match a correct answer.
+{examples}
+Question: "{query}"
+"""
+
+_FEWSHOT_REASON = """
+## Examples ##
+Question: "What color is the umbrella?"
+REASON: The question targets the umbrella's specific color; inverting flips it to a wrong value.
+TARGET: the umbrella
+OPERATION: invert
+INTENSITY: 2
+
+Question: "Are the flowers yellow?"
+REASON: The question depends on identifying a specific color; grayscaling removes color information.
+TARGET: the flowers
+OPERATION: desat
+INTENSITY: 2
+
+Question: "Is there a dog in the image?"
+REASON: The question depends on seeing the dog; obscuring its region hides the evidence of existence.
+TARGET: the dog
+OPERATION: obscure
+INTENSITY: 2
+
+Question: "How many people are in the image?"
+REASON: Counting requires distinct individuals; replacing the people region with noise makes the count impossible.
+TARGET: the people
+OPERATION: r-noise
+INTENSITY: 3
+
+Question: "What does the sign say?"
+REASON: The question requires reading text; heavy pixelation destroys legibility.
+TARGET: the text on the sign
+OPERATION: downsample
+INTENSITY: 3
+
+Question: "Is the cat wearing a collar?"
+REASON: A collar is a fine detail; blurring removes the fine texture needed to identify it.
+TARGET: the cat's neck
+OPERATION: blur
+INTENSITY: 2
+
+Question: "Is the table surface smooth?"
+REASON: Surface smoothness depends on fine texture; noise obscures the texture cues.
+TARGET: the table surface
+OPERATION: noise
+INTENSITY: 2
+"""
+
 # Fallback recipe used on parse failure (report Sec. 3.3).
 FALLBACK = {'target': None, 'op': 'noise', 'intensity': 2}
 
@@ -122,7 +187,8 @@ class Recipe:
 
 
 def build_planner_prompt(
-    query: str, variant: str = 'adversarial', icl: bool = True
+    query: str, variant: str = 'adversarial', icl: bool = True,
+    reasoning: bool = False,
 ) -> str:
     """Construct the planner prompt.
 
@@ -130,10 +196,17 @@ def build_planner_prompt(
         query: the question to plan a corruption for.
         variant: 'adversarial' (GAN-style framing) or 'neutral'.
         icl: include the few-shot exemplars (set False for the zero-shot ablation).
+        reasoning: add a one-sentence REASON field before the three-line recipe
+            (raises generation cost; raise planner max_new_tokens to match).
     """
     header = _ADVERSARIAL_HEADER if variant == 'adversarial' else _NEUTRAL_HEADER
-    examples = _FEWSHOT if icl else ''
-    return header + _BODY.format(menu=_OP_MENU, examples=examples, query=query)
+    if reasoning:
+        body = _BODY_REASON
+        examples = _FEWSHOT_REASON if icl else ''
+    else:
+        body = _BODY
+        examples = _FEWSHOT if icl else ''
+    return header + body.format(menu=_OP_MENU, examples=examples, query=query)
 
 
 def _canon_op(raw: str) -> str | None:

@@ -11,6 +11,7 @@
 #   datasets="coco aokvqa"  splits="random popular adversarial"
 #   methods="vcd_pure savcd tight hysteresis"  seeds="11 21 31"  cd_alpha=1
 #     vcd_pure = vanilla VCD (no SAT); savcd = SA-VCD (SAS+SAT); tight/hysteresis = QACD
+#   reasoning ablation:  methods="tight_reason hyst_reason"   (QACD + one-sentence REASON)
 # After it finishes (or any time):  python eval/qacd_summary.py output/matrix/*.jsonl
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)
@@ -54,8 +55,10 @@ run_cfg () {                # $1 method  $2 dataset  $3 split  $4 seed
     case "${method}" in
       vcd_pure)   args+=(--cd-mode vcd) ;;                                    # vanilla VCD (no SAT)
       savcd)      args+=(--cd-mode selfaug --cd-tau 0.5) ;;                   # SA-VCD (SAS + SAT), inline
-      tight)      args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode std --qacd-lam 1.0 --qacd-dilate 0) ;;
-      hysteresis) args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode hysteresis --qacd-grow-ratio 0.5 --qacd-dilate 0) ;;
+      tight)         args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode std --qacd-lam 1.0 --qacd-dilate 0) ;;
+      hysteresis)    args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode hysteresis --qacd-grow-ratio 0.5 --qacd-dilate 0) ;;
+      tight_reason)  args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode std --qacd-lam 1.0 --qacd-dilate 0 --qacd-reason) ;;     # QACD-tight + Reason
+      hyst_reason)   args+=(--cd-mode qacd --cd-tau 0.5 "${qacd_common[@]}" --qacd-thresh-mode hysteresis --qacd-grow-ratio 0.5 --qacd-dilate 0 --qacd-reason) ;;  # QACD-hyst + Reason
       *) echo "[FAIL] unknown method ${method}"; return ;;
     esac
     python eval/pope.py "${args[@]}" || { echo "[FAIL] ${ans} (see error above)"; return; }

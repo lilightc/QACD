@@ -205,6 +205,29 @@ def test_planner_prompt_variants():
     print('PASS test_planner_prompt_variants')
 
 
+def test_planner_reasoning_variant():
+    p_off = build_planner_prompt('Is there a cat?', reasoning=False)
+    p_on  = build_planner_prompt('Is there a cat?', reasoning=True)
+    assert 'REASON:' not in p_off and 'three lines' in p_off
+    assert 'REASON:' in p_on and 'four lines' in p_on
+    # parser still extracts the recipe when a REASON line is present
+    sample = ('REASON: The question targets the cat.\n'
+              'TARGET: the cat\nOPERATION: obscure\nINTENSITY: 2')
+    r = parse_recipe(sample)
+    assert r.parsed_ok and r.op == 'obscure' and r.intensity == 2
+    assert r.target == 'the cat'
+    # every reasoning exemplar must itself parse
+    import re
+    blocks = re.findall(
+        r'REASON: [^\n]+\nTARGET: ([^\n]+)\nOPERATION: ([^\n]+)\nINTENSITY: ([123])',
+        p_on)
+    assert len(blocks) >= 7, f'expected >=7 reasoning exemplars, got {len(blocks)}'
+    for tgt, op, inten in blocks:
+        rr = parse_recipe(f'TARGET: {tgt}\nOPERATION: {op}\nINTENSITY: {inten}')
+        assert rr.parsed_ok, f'exemplar did not parse: {op}'
+    print(f'PASS test_planner_reasoning_variant ({len(blocks)} REASON exemplars parse)')
+
+
 def test_planner_fewshot_toggle():
     from utils.qacd_planner import parse_recipe as _pr
     with_icl = build_planner_prompt('Is there a dog?', 'adversarial', icl=True)
@@ -268,5 +291,6 @@ if __name__ == '__main__':
     test_parse_recipe_fallback()
     test_planner_prompt_variants()
     test_planner_fewshot_toggle()
+    test_planner_reasoning_variant()
     test_save_debug()
     print('\nAll local QACD tests passed.')

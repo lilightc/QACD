@@ -226,14 +226,18 @@ class LlavaModel(ModelWrapper):
         device = images.device
 
         # Stage 1: image-conditioned planner -> recipe text.
+        reasoning = getattr(cfg, 'qacd_reason', False)
         prompt = build_planner_prompt(
             query,
             getattr(cfg, 'qacd_prompt', 'adversarial'),
             icl=getattr(cfg, 'qacd_icl', True),
+            reasoning=reasoning,
         )
         planner_ids = self._build_image_prompt_ids(prompt)
+        # reasoning adds a one-sentence justification -> need more output tokens
         planner_cfg = GenerationConfig.from_dict(
-            {**self.greedy_config.to_dict(), 'max_new_tokens': 64}
+            {**self.greedy_config.to_dict(),
+             'max_new_tokens': 256 if reasoning else 64}
         )
         gen = self.model.generate(
             planner_ids, images=images, generation_config=planner_cfg
