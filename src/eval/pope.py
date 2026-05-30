@@ -7,7 +7,6 @@ from tqdm import tqdm
 from models.base_models import load_model
 from utils.utils import (
     VcdConfig,
-    get_last_qid,
     set_seed,
     setup_path
 )
@@ -57,7 +56,8 @@ def eval_model(args):
 
     # Can save computation by recording SAS results
     if args.sas_path is not None:
-        sas = [json.loads(i) for i in open(os.path.expanduser(args.sas_path), 'r')]
+        sas_list = [json.loads(i) for i in open(os.path.expanduser(args.sas_path), 'r')]
+        sas = {s['question_id']: s for s in sas_list}  # qid-keyed so resume skips work
     else:
         sas = None
 
@@ -65,17 +65,37 @@ def eval_model(args):
     if args.limit:
         questions = questions[:args.limit]
 
+    # Question-level resume: skip qids already in the answers file. Tolerate a
+    # truncated trailing line from an abrupt kill by rewriting only good lines.
+    answered = set()
+    if os.path.exists(answers_file) and os.path.getsize(answers_file) > 0:
+        good_lines = []
+        with open(answers_file, 'r') as f:
+            for ln in f:
+                try:
+                    rec = json.loads(ln)
+                    answered.add(rec['question_id'])
+                    good_lines.append(ln)
+                except (json.JSONDecodeError, KeyError):
+                    pass
+        with open(answers_file, 'w') as f:
+            f.writelines(good_lines)
+        if answered:
+            print(f'[resume] {len(answered)}/{len(questions)} already answered; skipping')
+
     n = parse_fb = region_fb = 0
     ans_file = open(answers_file, 'a')
     for i, line in enumerate(tqdm(questions, ncols=79)):
         idx = line['question_id']
+        if idx in answered:
+            continue
 
         image_file, query = line['image'], line['text']
         outputs = model.generate_sentence(
             query=query,
             image_path=os.path.join(args.image_folder, image_file),
             append_txt='\nAnswer the question using a single word or phrase',
-            mode=(sas[i]['applied_aug'] if (cd_config.cd_mode == 'selfaug' and sas is not None)
+            mode=(sas[idx]['applied_aug'] if (cd_config.cd_mode == 'selfaug' and sas is not None)
                   else cd_config.cd_mode),  # selfaug w/o a precomputed SAS file runs inline
             qid=idx,
         )

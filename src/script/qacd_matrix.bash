@@ -45,8 +45,15 @@ run_cfg () {                # $1 method  $2 dataset  $3 split  $4 seed
   if [ -f "${ans}" ] && [ "$(grep -c . "${ans}")" -eq "${ntotal}" ]; then
     echo "[skip] ${method} ${ds} ${sp} seed${seed} (complete, ${ntotal} q)"
   else
-    rm -f "${ans}"
-    echo "[run ] ${method} ${ds} ${sp} seed${seed} ($(date +%H:%M:%S))"
+    # Do NOT delete a partial file -- pope.py now resumes per-question by
+    # skipping qids already present in the answers file. An interrupted cell
+    # picks up where it left off rather than restarting from question 0.
+    if [ -f "${ans}" ]; then
+      ndone=$(grep -c . "${ans}")
+      echo "[run ] ${method} ${ds} ${sp} seed${seed} (resume ${ndone}/${ntotal}, $(date +%H:%M:%S))"
+    else
+      echo "[run ] ${method} ${ds} ${sp} seed${seed} ($(date +%H:%M:%S))"
+    fi
     # cd-tau (SAT) is per-method: omit it for vanilla VCD, include 0.5 elsewhere
     local args=(--model-id ${model_id} --image-folder ${image_folder}
                 --question-file "${qfile}" --answers-file "${ans}"
