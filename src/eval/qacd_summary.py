@@ -68,8 +68,18 @@ def main():
         print('No answer files given.')
         return
 
+    # cache total question count per (dataset, split) so we can detect partial cells
+    gt_total = {}
+    def _ntotal(ds, sp):
+        key = (ds, sp)
+        if key not in gt_total:
+            with open(f'./data/POPE/{ds}/{ds}_pope_{sp}.jsonl') as fh:
+                gt_total[key] = sum(1 for l in fh if l.strip())
+        return gt_total[key]
+
     # group metric values by (dataset, split, method) over seeds
     groups = defaultdict(lambda: defaultdict(list))  # key -> metric -> [values]
+    skipped = []
     for p in sorted(paths):
         stem = os.path.basename(p)[:-len('.jsonl')] if p.endswith('.jsonl') else os.path.basename(p)
         parts = stem.split('_')
@@ -82,10 +92,21 @@ def main():
             print(f'[warn] gt not found for {p}: {gt_path}')
             continue
         m = _metrics(gt_path, p)
+        # skip partial cells (would otherwise contaminate aggregates)
+        total = _ntotal(dataset, split)
+        if m['n'] < total:
+            skipped.append((p, m['n'], total))
+            continue
         key = (dataset, split, method)
         for k in ('acc', 'f1', 'yes'):
             groups[key][k].append(m[k])
         groups[key]['_seeds'].append(seed)
+
+    if skipped:
+        print('[skipped partial cells (n_eval < n_total):]')
+        for p, n, t in skipped:
+            print(f'  {n:>4}/{t}  {p}')
+        print()
 
     # print table
     hdr = f'{"dataset":<8} {"split":<12} {"method":<11} {"seeds":>5}  {"Acc":>14} {"F1":>14} {"Yes%":>13}'
