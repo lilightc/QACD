@@ -216,16 +216,16 @@ def test_planner_reasoning_variant():
     r = parse_recipe(sample)
     assert r.parsed_ok and r.op == 'obscure' and r.intensity == 2
     assert r.target == 'the cat'
-    # every reasoning exemplar must still produce a valid recipe.
-    # NOTE: REASON can be multi-line now, so build a (REASON-end -> next-recipe)
-    # template via TARGET-line anchored regex (multiline).
+    # every reasoning exemplar must still produce a valid recipe. Filter out the
+    # format-spec lines (they hold "<placeholder>" values), then count.
     import re
-    targets = re.findall(r'^TARGET: ([^\n]+)$', p_on, re.MULTILINE)
-    ops = re.findall(r'^OPERATION: ([^\n]+)$', p_on, re.MULTILINE)
-    intens = re.findall(r'^INTENSITY: ([123])$', p_on, re.MULTILINE)
-    # there's a format-spec line too (TARGET: <one-line description...>), so subtract 1
-    # for it; we expect 7 actual exemplars.
-    assert len(targets) - 1 >= 7 and len(ops) - 1 >= 7 and len(intens) - 1 >= 7
+    real_targets = [t for t in re.findall(r'^TARGET: ([^\n]+)$', p_on, re.MULTILINE)
+                    if not t.startswith('<')]
+    real_ops = [o for o in re.findall(r'^OPERATION: ([^\n]+)$', p_on, re.MULTILINE)
+                if not o.startswith('<')]
+    real_intens = re.findall(r'^INTENSITY: ([123])$', p_on, re.MULTILINE)
+    assert len(real_targets) >= 7 and len(real_ops) >= 7 and len(real_intens) >= 7, \
+        f'exemplar counts: T={len(real_targets)} O={len(real_ops)} I={len(real_intens)}'
 
     # hardening: a multi-sentence REASON that mentions "target" / "operation" /
     # "intensity" in prose must NOT trick the parser into picking those.
